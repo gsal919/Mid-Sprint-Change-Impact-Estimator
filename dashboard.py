@@ -25,7 +25,7 @@ st.set_page_config(
 # ============================================================================
 @st.cache_resource
 def load_fiserv_data():
-    data_dir = "fiserv_data"   # adjust if different
+    data_dir = "data"   # adjust if different
     if not os.path.exists(data_dir):
         st.warning(f"Data directory '{data_dir}' not found. Run the data generator first.")
         return None
