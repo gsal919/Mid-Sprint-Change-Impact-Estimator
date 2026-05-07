@@ -1,5 +1,5 @@
-# fiserv_complete_dashboard.py
-# ✅ ML‑integrated version using pseudo‑data trained LightGBM models
+# complete_dashboard.py
+# ML‑integrated version using pseudo‑data trained LightGBM models
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -14,7 +14,7 @@ import ast
 # PAGE CONFIGURATION (MUST BE FIRST)
 # ============================================================================
 st.set_page_config(
-    page_title="Fiserv Impact Estimator",
+    page_title="Mid-Sprint Change Impact Estimator",
     page_icon="🏦",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -263,7 +263,7 @@ def safe_parse_stages(stages_str):
 # ============================================================================
 # DASHBOARD UI (same structure, only prediction call adapted to pass item_type)
 # ============================================================================
-st.title("🏦 Fiserv - Mid-Sprint Change Impact Estimator")
+st.title("🏦 - Mid-Sprint Change Impact Estimator")
 st.markdown("*AI-powered delivery impact estimation using trained LightGBM models*")
 
 tab1, tab2, tab3, tab4 = st.tabs([
@@ -420,4 +420,4 @@ with tab1:
 # FOOTER
 # ============================================================================
 st.markdown("---")
-st.caption("🏦 **Fiserv Internal Tool** | Powered by LightGBM models | Spillover F1: 0.78 | Delay MAE: 3.2 days")
+st.caption("🏦 **Proof‑of‑Concept – Academic Project** | Powered by LightGBM models | Spillover F1: 0.78 | Delay MAE: 3.2 days")
