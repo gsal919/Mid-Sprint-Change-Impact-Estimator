@@ -17,7 +17,7 @@ TARGET_REGRESSION = "delay_days_caused"
 os.makedirs('models', exist_ok=True)
 
 print("="*60)
-print("TRAINING FISERV DELAY PREDICTION MODELS (Pseudo‑data)")
+print("TRAINING DELAY PREDICTION MODELS (Pseudo‑data)")
 print("="*60)
 
 # ============================================
