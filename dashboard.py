@@ -110,7 +110,7 @@ section[data-testid="stSidebar"] * {
 # LOAD DATA AND MODELS
 # ============================================================================
 @st.cache_data
-def load_release_cadence(csv_path="/Users/gurudassalunke/Desktop/Guru/Internship/fiserv_data/release_cadence.csv"):
+def load_release_cadence(csv_path="data/release_cadence.csv"):
     df = pd.read_csv(csv_path)
     # Ensure each row has a list of stages (split by comma if multiple)
 
@@ -205,7 +205,7 @@ def get_total_active_stages(original_df, current_date):
 
 @st.cache_resource
 def load_fiserv_data():
-    data_dir = "/Users/gurudassalunke/Desktop/Guru/Internship/fiserv_data"   # adjust if different
+    data_dir = "data"   # adjust if different
     if not os.path.exists(data_dir):
         st.warning(f"Data directory '{data_dir}' not found. Run the data generator first.")
         return None
@@ -228,7 +228,7 @@ def load_fiserv_data():
 @st.cache_resource
 def load_models():
     """Load the LightGBM models trained on pseudo‑data."""
-    model_dir = "/Users/gurudassalunke/Desktop/Guru/Internship/models"   # adjust if models are elsewhere
+    model_dir = "models"   # adjust if models are elsewhere
     models = {}
     if not os.path.exists(model_dir):
         st.info("Model directory not found – will use heuristic only.")
