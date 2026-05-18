@@ -7,7 +7,7 @@ from sklearn.model_selection import train_test_split
 # ============================================================
 # CONFIGURATION
 # ============================================================
-DATA_DIR = "data"
+DATA_DIR = "fiserv_data"
 INPUT_FILE = os.path.join(DATA_DIR, "change_requests.csv")
 OUTPUT_DIR = "data/processed_pseudo"
 os.makedirs(OUTPUT_DIR, exist_ok=True)
