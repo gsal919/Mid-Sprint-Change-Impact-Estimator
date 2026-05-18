@@ -32,12 +32,12 @@ class FiservDataGenerator:
         # Teams (6 teams with capacities)
         # ------------------------------------------------------------
         self.teams = [
-            {"team_id": 1, "name": "Scrum Team 1", "location": "NZ", "headcount": 8, "hours_per_sprint": 320, "type": "Scrum"},
-            {"team_id": 2, "name": "Scrum Team 2", "location": "NZ", "headcount": 8, "hours_per_sprint": 320, "type": "Scrum"},
-            {"team_id": 3, "name": "Scrum Team 3", "location": "NZ", "headcount": 10, "hours_per_sprint": 400, "type": "Scrum"},
-            {"team_id": 4, "name": "Scrum Team 4", "location": "NZ", "headcount": 8, "hours_per_sprint": 320, "type": "Scrum"},
-            {"team_id": 5, "name": "Scrum Team 5", "location": "NZ", "headcount": 10, "hours_per_sprint": 400, "type": "Scrum"},
-            {"team_id": 6, "name": "Scrum Team 6", "location": "Overseas", "headcount": 3, "hours_per_sprint": 120, "type": "Scrum"}
+            {"team_id": 1, "name": "Scrum Team 1", "location": "NZ", "headcount": 6, "hours_per_week": 240, "type": "Scrum"},
+            {"team_id": 2, "name": "Scrum Team 2", "location": "NZ", "headcount": 7, "hours_per_week": 280, "type": "Scrum"},
+            {"team_id": 3, "name": "Scrum Team 3", "location": "NZ", "headcount": 8, "hours_per_week": 320, "type": "Scrum"},
+            {"team_id": 4, "name": "Scrum Team 4", "location": "NZ", "headcount": 9, "hours_per_week": 360, "type": "Scrum"},
+            {"team_id": 5, "name": "Scrum Team 5", "location": "NZ", "headcount": 10, "hours_per_week": 400, "type": "Scrum"},
+            {"team_id": 6, "name": "Scrum Team 6", "location": "Overseas", "headcount": 3, "hours_per_week": 120, "type": "Scrum"}
         ]
         
         # ------------------------------------------------------------
@@ -60,79 +60,79 @@ class FiservDataGenerator:
         # Work item hierarchy templates (Epic, Feature, Business Story, User Story, Task)
         # ------------------------------------------------------------
         self.epic_templates = [
-            {"name": "Accounts", "story_points": 21},
-            {"name": "Payments", "story_points": 34},
-            {"name": "Security", "story_points": 21},
-            {"name": "Reporting", "story_points": 13},
-            {"name": "Notifications", "story_points": 8}
+            {"name": "Accounts", "story_points": 53},
+            {"name": "Payments", "story_points": 30},
+            {"name": "Security", "story_points": 19},
+            {"name": "Reporting", "story_points": 18},
+            {"name": "Notifications", "story_points": 10}
         ]
         
         self.feature_templates = {
             "Accounts": [
-                {"name": "User Registration", "story_points": 13},
+                {"name": "User Registration", "story_points": 6},
                 {"name": "User Profile", "story_points": 8},
                 {"name": "Account Settings", "story_points": 8},
-                {"name": "Cards", "story_points": 13}
+                {"name": "Cards", "story_points": 43}
             ],
             "Payments": [
-                {"name": "Payment Gateway", "story_points": 21},
-                {"name": "Transaction History", "story_points": 13},
+                {"name": "Payment Gateway", "story_points": 9},
+                {"name": "Transaction History", "story_points": 7},
                 {"name": "Refunds", "story_points": 8},
-                {"name": "Recurring Billing", "story_points": 13}
+                {"name": "Recurring Billing", "story_points": 6}
             ],
             "Security": [
-                {"name": "Authentication", "story_points": 13},
-                {"name": "Authorization", "story_points": 8},
-                {"name": "Audit Logs", "story_points": 8},
-                {"name": "Encryption", "story_points": 13}
+                {"name": "Authentication", "story_points": 7},
+                {"name": "Authorization", "story_points": 5},
+                {"name": "Audit Logs", "story_points": 4},
+                {"name": "Encryption", "story_points": 3}
             ],
             "Reporting": [
-                {"name": "Dashboard", "story_points": 13},
-                {"name": "Custom Reports", "story_points": 8},
-                {"name": "Data Export", "story_points": 5},
-                {"name": "Scheduled Reports", "story_points": 8}
+                {"name": "Dashboard", "story_points": 6},
+                {"name": "Custom Reports", "story_points": 5},
+                {"name": "Data Export", "story_points": 3},
+                {"name": "Scheduled Reports", "story_points": 4}
             ],
             "Notifications": [
-                {"name": "Email Service", "story_points": 8},
-                {"name": "Push Notifications", "story_points": 8},
-                {"name": "In-App Messages", "story_points": 5},
-                {"name": "SMS Alerts", "story_points": 5}
+                {"name": "Email Service", "story_points": 4},
+                {"name": "Push Notifications", "story_points": 3},
+                {"name": "In-App Messages", "story_points": 2},
+                {"name": "SMS Alerts", "story_points": 1}
             ]
         }
         
         self.business_story_templates = {
             "Cards": [
-                {"name": "Add Card", "story_points": 8},
-                {"name": "Remove Card", "story_points": 5},
-                {"name": "Update Card", "story_points": 5},
+                {"name": "Add Card", "story_points": 25},
+                {"name": "Remove Card", "story_points": 15},
+                {"name": "Update Card", "story_points": 10},
                 {"name": "View Cards", "story_points": 3}
             ],
             "User Registration": [
-                {"name": "Sign Up", "story_points": 8},
-                {"name": "Email Verification", "story_points": 5},
-                {"name": "Password Reset", "story_points": 5}
+                {"name": "Sign Up", "story_points": 3},
+                {"name": "Email Verification", "story_points": 2},
+                {"name": "Password Reset", "story_points": 1}
             ],
             "Payment Gateway": [
-                {"name": "Process Payment", "story_points": 13},
-                {"name": "Payment Validation", "story_points": 8},
-                {"name": "Payment Callback", "story_points": 5}
+                {"name": "Process Payment", "story_points": 6},
+                {"name": "Payment Validation", "story_points": 2},
+                {"name": "Payment Callback", "story_points": 1}
             ]
         }
         
         self.user_story_templates = {
             "Add Card": [
-                {"name": "Display Card Menu", "story_points": 8},
-                {"name": "Display Card Screen", "story_points": 8},
-                {"name": "Make a transfer", "story_points": 13},
-                {"name": "Review transfer", "story_points": 5},
+                {"name": "Display Card Menu", "story_points": 7},
+                {"name": "Display Card Screen", "story_points": 5},
+                {"name": "Make a transfer", "story_points": 4},
+                {"name": "Review transfer", "story_points": 2},
                 {"name": "Transaction history", "story_points": 3},
-                {"name": "Send email", "story_points": 3},
+                {"name": "Send email", "story_points": 1},
                 {"name": "Verify Email", "story_points": 3}
             ],
             "Process Payment": [
-                {"name": "Payment Form", "story_points": 8},
-                {"name": "Payment Confirmation", "story_points": 5},
-                {"name": "Error Handling", "story_points": 5}
+                {"name": "Payment Form", "story_points": 2},
+                {"name": "Payment Confirmation", "story_points": 3},
+                {"name": "Error Handling", "story_points": 1}
             ]
         }
         
@@ -178,11 +178,11 @@ class FiservDataGenerator:
     # -----------------------------------------------------------------
     def _get_effort_hours_for_task(self, story_points):
         """Return (original_estimate, rework, actual) for a task (1-4 story points)."""
-        original = random.randint(story_points*4, story_points*7)
+        original = random.randint(story_points*3, story_points*6)
         
-        rework = random.randint(0, int(original * 0.3))
+        rework = random.randint(0, int(original * 0.2))
         actual = original + rework
-        actual = max(original + 1, actual)
+        #actual = max(original + 1, actual)
         return original, rework, actual
     
  
@@ -192,8 +192,8 @@ class FiservDataGenerator:
     # -----------------------------------------------------------------
     def generate_releases(self, start_date=datetime(2024, 1, 1)):
         print("Generating releases...")
-        for i in range(3):
-            name = ["X", "X+1", "X+2"][i]
+        for i in range(9):
+            name = ["X+2", "X+3", "X+4", "X+5", "X+6", "X+7","X+8", "X+9", "X+10"][i]
             release = {
                 "release_id": f"REL_{name}",
                 "release_name": f"Release {name}",
@@ -223,10 +223,10 @@ class FiservDataGenerator:
         for release in self.releases:
             for team in self.teams:
                 duration_days = (release["end_date"] - release["start_date"]).days
-                num_sprints = max(1, duration_days // 14)
+                num_sprints = max(1, duration_days // 10)
                 for sn in range(1, num_sprints+1):
-                    start = release["start_date"] + timedelta(days=(sn-1)*14)
-                    end = start + timedelta(days=14)
+                    start = release["start_date"] + timedelta(days=(sn-1)*10)
+                    end = start + timedelta(days=10)
                     if end <= release["end_date"]:
                         sprint = {
                             "sprint_id": sprint_id,
@@ -237,7 +237,7 @@ class FiservDataGenerator:
                             "release_id": release["release_id"],
                             "start_date": start,
                             "end_date": end,
-                            "capacity_hours": team["hours_per_sprint"],
+                            "capacity_hours": team["hours_per_week"],
                             "headcount": team["headcount"]
                         }
                         self.sprints.append(sprint)
@@ -247,7 +247,7 @@ class FiservDataGenerator:
     # -----------------------------------------------------------------
     # Generate work item hierarchy (Epic → Feature → BS → US → Tasks)
     # -----------------------------------------------------------------
-    def generate_work_items(self, target_tasks=2000):
+    def generate_work_items(self, target_tasks=5000):
         print("Generating work items...")
         item_id = 1
         task_count = 0
@@ -393,10 +393,10 @@ class FiservDataGenerator:
             # ============================================================
             days_into = random.randint(1, 9)
             sprint_progress = days_into / 10
-            timing_penalty = 1 + (sprint_progress * 0.8)
+            timing_penalty = 1 + (sprint_progress * 0.7)
 
-            priority_factor = {"Low":0.5, "Medium":0.7, "High":1.0, "Critical":1.3}.get(work_item["priority"], 1.0)
-            complexity_multiplier = 1 + (story_pts / 13)
+            priority_factor = {"Low":0.3, "Medium":0.6, "High":0.9, "Critical":1.2}.get(work_item["priority"], 1.0)
+            complexity_multiplier = 1 + (story_pts / 15)
             #dependency_multiplier = random.uniform(1.0, 2.5)
 
             impacted = (
@@ -411,7 +411,7 @@ class FiservDataGenerator:
             # 4. Remaining capacity with random utilisation
             # ============================================================
             remaining_base = sprint["capacity_hours"] * (1 - sprint_progress)
-            utilisation = random.uniform(0.75, 0.97)   # team already 75-97% busy
+            utilisation = random.uniform(0.6, 0.8)   # team already 75-97% busy
             remaining = remaining_base * (1 - utilisation)
 
             # ============================================================
@@ -434,7 +434,7 @@ class FiservDataGenerator:
             # 6. Delay days calculation
             # ============================================================
             if spillover:
-                daily_output = sprint["headcount"] * random.uniform(0.8, 1.2)
+                daily_output = sprint["headcount"] * random.uniform(0.6, 1.0)
                 extra_effort = max(impacted - remaining, 0)
                 overload_ratio = min(impacted / max(remaining, 20), 5)
                 base_delay = extra_effort / max(daily_output, 1)
