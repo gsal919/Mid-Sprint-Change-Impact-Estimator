@@ -684,7 +684,7 @@ if data is not None:
     st.sidebar.markdown("---")
     st.sidebar.subheader("🤖 AI Work Item Suggestion")
 
-    change_desc = st.sidebar.text_area("Describe the change", placeholder="e.g., Add biometric authentication for iOS users", height=80, key="ai_desc_2")
+    change_desc = st.sidebar.text_area("Describe the change", placeholder="e.g., Payment Confirmation for Card Update", height=80, key="ai_desc_2")
 
     if st.sidebar.button("Suggest Work Item"):
         if change_desc.strip():
