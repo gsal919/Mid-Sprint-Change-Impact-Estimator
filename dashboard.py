@@ -74,6 +74,23 @@ section[data-testid="stSidebar"] div[data-testid="stSelectbox"] div {
     background-color: #0E1117 !important;
     color: white !important;
 }
+            
+/* Sidebar text area (the input field itself) */
+section[data-testid="stSidebar"] textarea {
+    background-color: #FF0000 !important;   /* dark background */
+    color: white !important;
+    border: 1px solid white !important;     /* white border */
+    border-radius: 8px;
+}
+
+/* Sidebar button (the container) */
+section[data-testid="stSidebar"] button {
+    background-color: #FF0000 !important;   /* orange background */
+    color: white !important;
+    border: none !important;
+    border-radius: 10px;
+    font-weight: bold;
+}
 
 /* Sidebar text */
 section[data-testid="stSidebar"] * {
@@ -323,6 +340,42 @@ def build_full_timeline(cadence_df, start_date, finish_date,delay_days=0):
     return pd.DataFrame(rows)
 
 
+
+
+
+def get_current_sprint_from_cadence(cadence_df, current_date):
+    """
+    Find the sprint that contains the current_date using the release_cadence.
+    Returns (sprint_name, sprint_duration_days, days_into_sprint)
+    """
+    # Make a copy to avoid modifying cached data
+    df = cadence_df.copy()
+    
+    # Convert date columns to datetime using the correct format
+    date_columns = ["week_start", "week_end", "sprint_start", "sprint_end"]
+    for col in date_columns:
+        if col in df.columns:
+            # Try to convert; assume format day/month/year (e.g., 22/09/25)
+            df[col] = pd.to_datetime(df[col], format="%d/%m/%y", errors="coerce")
+    
+    # Drop rows with failed conversion
+    df = df.dropna(subset=["week_start", "week_end", "sprint_start", "sprint_end"])
+    
+    # Filter rows where current_date falls within week_start and week_end
+    mask = (df["week_start"] <= current_date) & (current_date <= df["week_end"])
+    if not mask.any():
+        return None, None, None
+    
+    # Take the first matching row
+    row = df.loc[mask].iloc[0]
+    sprint_name = row["sprint_number"]
+    sprint_start = row["sprint_start"]
+    sprint_end = row["sprint_end"]
+    #sprint_duration = (sprint_end - sprint_start).days
+    sprint_duration = 10
+    days_into_sprint = (current_date - sprint_start).days
+    return sprint_name, sprint_duration, days_into_sprint
+
 # ============================================================================
 # FEATURE ENGINEERING – EXACT MATCH TO TRAINING (13 features)
 # ============================================================================
@@ -392,6 +445,8 @@ def engineer_ml_features(story_points, days_into_sprint, sprint_duration,
         df = df[expected_cols]
 
     return df
+
+
 
 # ============================================================================
 # PREDICTION FUNCTION – ML first, heuristic fallback
@@ -540,6 +595,10 @@ def get_dashboard_context():
         context += f"Active releases: {', '.join(st.session_state.active_releases)}.\n"
     if "total_active_stages" in st.session_state:
         context += f"Total active stages: {st.session_state.total_active_stages}.\n"
+
+    if "current_inputs" in st.session_state:
+        inp = st.session_state.current_inputs
+        context += f"Current change: {inp['story_points']} story points, priority={inp['priority']}, affected components={inp['affected_components']}, mid‑sprint={inp['is_mid_sprint']}, days into sprint={inp['days_into_sprint']}, sprint duration={inp['sprint_duration']}.\n"
     # Historical statistics
     stats = get_historical_stats()
     if stats:
@@ -590,33 +649,151 @@ st.sidebar.title("⚙️ Change Request Control Center")
 st.sidebar.markdown("---")
 
 # ----------------------------------------------------------------
-# WORK ITEM HIERARCHY
+# WORK ITEM HIERARCHY SUGGESTION WITH AI ASSISTANT
 # ----------------------------------------------------------------
 
 st.sidebar.subheader("📋 Work Item")
 
-#st.title("🏦 Fiserv - Mid-Sprint Change Impact Estimator")
-#st.markdown("*AI-powered delivery impact estimation using trained LightGBM models*")
+if data is not None:
+    work_items_df = data["work_items"]
+
+    # Build hierarchy mapping
+    item_dict = {}
+    for _, row in work_items_df.iterrows():
+        item_dict[row["work_item_id"]] = {
+            "name": row["name"],
+            "level": row["level"],
+            "parent_id": row["parent_id"]
+        }
+
+    def get_path(item_id):
+        path = []
+        cur = item_id
+        while cur in item_dict:
+            node = item_dict[cur]
+            path.append(f"{node['level']}: {node['name']}")
+            cur = node["parent_id"]
+        return " -> ".join(reversed(path))
+
+    # Create a compact summary of available epics, features, user stories for the AI prompt
+    #epic_list = work_items_df[work_items_df["level"] == "Epic"]["name"].unique().tolist()
+    #feature_list = work_items_df[work_items_df["level"] == "Feature"]["name"].unique().tolist()
+    #business_list = work_items_df[work_items_df["level"] == "Business Story"]["name"].unique().tolist()
+    #story_list = work_items_df[work_items_df["level"] == "User Story"]["name"].unique().tolist()
+    
+    st.sidebar.markdown("---")
+    st.sidebar.subheader("🤖 AI Work Item Suggestion")
+
+    change_desc = st.sidebar.text_area("Describe the change", placeholder="e.g., Add biometric authentication for iOS users", height=80, key="ai_desc_2")
+
+    if st.sidebar.button("Suggest Work Item"):
+        if change_desc.strip():
+            keywords = set(change_desc.lower().split()) - {"a","an","the","and","or","for","of","to","in","on","at","by","with","without","from","via","add","update","remove","fix","implement","create"}
+            # Filter work items by name containing any keyword
+            matching = work_items_df[work_items_df["name"].str.lower().str.contains('|'.join(keywords), na=False)]
+            # Limit to 20 to keep prompt manageable
+            top_items = matching.head(20)
+            items_with_path = []
+            for _, row in top_items.iterrows():
+                items_with_path.append(get_path(row["work_item_id"]))
+
+            with st.spinner("Analyzing..."):
+                # Build prompt for Groq
+
+                prompt = f"""
+                You are an assistant that matches change descriptions to the most appropriate work item hierarchy.
+                
+        
+                Available work items (with full hierarchy path):
+                {chr(10).join(items_with_path)}
+
+                Change description: "{change_desc}"
+    
+                Choose the most suitable Epic, Feature, Business Story, and User Story from the list above.
+                If none fits, reply "None".
+                Reply exactly in this format:
+                EPIC: <epic name>
+                FEATURE: <feature name>
+                BUSINESS STORY: <business story name>
+                USER STORY: <user story name>
+                """
+                client = init_groq()
+                if client:
+                    try:
+                        response = client.chat.completions.create(
+                            model="llama-3.3-70b-versatile",
+                            messages=[{"role": "user", "content": prompt}],
+                            temperature=0.2,
+                            max_tokens=200
+                        )
+                        answer = response.choices[0].message.content
+                        
+                        # Parse the response
+                        import re
+                        epic_match = re.search(r"EPIC:\s*(.+)", answer, re.IGNORECASE)
+                        feature_match = re.search(r"FEATURE:\s*(.+)", answer, re.IGNORECASE)
+                        business_match = re.search(r"BUSINESS STORY:\s*(.+)", answer, re.IGNORECASE)
+                        story_match = re.search(r"USER STORY:\s*(.+)", answer, re.IGNORECASE)
+                        
+                        if epic_match:
+                            st.session_state.suggested_epic = epic_match.group(1).strip()
+                        if feature_match:
+                            st.session_state.suggested_feature = feature_match.group(1).strip()  # fix variable name
+                        if business_match:
+                            st.session_state.suggested_bs = business_match.group(1).strip()
+                        if story_match:
+                            st.session_state.suggested_us = story_match.group(1).strip()
+                        
+                        st.rerun()
+                    except Exception as e:
+                        st.sidebar.error(f"Suggestion failed: {e}")
+                else:
+                    st.sidebar.error("Groq client not available.")
+        else:
+            st.sidebar.warning("Please enter a description.")
+else:
+    work_items_df = None
 
 
-
-item_type = "User Story"   # default
+# After loading hierarchy options, set default index
 if data is not None:
     hierarchy = get_hierarchy_options(data)
     epics = hierarchy.get("epics", [])
+    
     if epics:
-        selected_epic = st.sidebar.selectbox("**Epic**", epics)
+    # Use suggested epic if available
+        default_epic = st.session_state.get("suggested_epic", None)
+        if default_epic in epics:
+            epic_index = epics.index(default_epic)
+        else:
+            epic_index = 0
+        selected_epic = st.sidebar.selectbox("**Epic**", epics, index=epic_index)
+
         features = hierarchy.get("features", {}).get(selected_epic, [])
         if features:
-            selected_feature = st.sidebar.selectbox("**Feature**", features)
+            default_feature = st.session_state.get("suggested_feature", None)
+            if default_feature in features:
+                feature_index = features.index(default_feature)
+            else:        feature_index = 0
+            selected_feature = st.sidebar.selectbox("**Feature**", features, index=feature_index)
+
             bs_key = f"{selected_epic}|{selected_feature}"
             business_stories = hierarchy.get("business_stories", {}).get(bs_key, [])
             if business_stories:
-                selected_bs = st.sidebar.selectbox("**Business Story**", business_stories)
+                default_bs = st.session_state.get("suggested_business", None)
+                if default_bs in business_stories:
+                    bs_index = business_stories.index(default_bs)
+                else:        bs_index = 0
+                selected_bs = st.sidebar.selectbox("**Business Story**", business_stories, index=bs_index)  
+
                 us_key = f"{selected_epic}|{selected_feature}|{selected_bs}"
                 user_stories = hierarchy.get("user_stories", {}).get(us_key, [])
                 if user_stories:
-                    selected_us = st.sidebar.selectbox("**User Story**", user_stories)
+                    default_us = st.session_state.get("suggested_story", None)
+                    if default_us in user_stories:
+                        us_index = user_stories.index(default_us)
+                    else:        us_index = 0
+                    selected_us = st.sidebar.selectbox("**User Story**", user_stories, index=us_index)
                     item_type = "User Story"
                             # Retrieve story points from the selected user story
                     df = data["work_items"]
@@ -637,6 +814,10 @@ if data is not None:
 else:
     story_points = st.number_input("Story Points", min_value=0.5, max_value=21.0, value=5.0, step=0.5)
 
+
+    
+
+
 # ----------------------------------------------------------------
 # IMPACT DETAILS
 # ----------------------------------------------------------------
@@ -644,7 +825,17 @@ else:
 st.sidebar.subheader("🚨 Change Impact")
 
 priority = st.sidebar.select_slider("**Priority**", options=["Low", "Medium", "High", "Critical"], value="Medium")
-affected_components = st.sidebar.slider("**Affected Components**", min_value=1, max_value=5, value=1)
+#affected_components = st.sidebar.slider("**Affected Components**", min_value=1, max_value=5, value=1)
+st.sidebar.subheader("🔧 Affected Components")
+component_options = ["iOS", "Android", "Platform", "Backend", "QA", "DevOps", "Database"]
+selected_components = st.sidebar.multiselect(
+    "Select affected components",
+    options=component_options,
+    default=["Platform"],
+    help="Each additional component increases coordination effort and risk."
+)
+affected_components = len(selected_components) if selected_components else 1
+st.sidebar.caption(f"Total components affected: {affected_components}")
 #is_mid_sprint = st.checkbox("**Mid-Sprint Change Request**", value=True)
 is_mid_sprint = st.sidebar.toggle("Mid Sprint Change", value=True)
 
@@ -653,11 +844,28 @@ is_mid_sprint = st.sidebar.toggle("Mid Sprint Change", value=True)
 # ----------------------------------------------------------------
 st.sidebar.subheader("📅 Sprint Context")
 
-sprint_duration = st.sidebar.slider("**Sprint Duration (days)**", min_value=5, max_value=21, value=10)
-days_into_sprint = st.sidebar.slider("**Days into Sprint**", min_value=0, max_value=sprint_duration-1, value=5)
+#sprint_duration = st.sidebar.slider("**Sprint Duration (days)**", min_value=5, max_value=21, value=10)
+#days_into_sprint = st.sidebar.slider("**Days into Sprint**", min_value=0, max_value=sprint_duration-1, value=5)
+
+#sprint_duration = 10
+#sprints_df = data["release_cadence"]
+cadence_df = load_release_cadence()
 
 current_date = st.sidebar.date_input("Current Date", date.today())
-cadence_df = load_release_cadence()
+#current_sprint, sprint_duration, days_into_sprint = get_current_sprint(sprints_df, pd.to_datetime(current_date))
+sprint_name, sprint_duration, days_into_sprint = get_current_sprint_from_cadence(cadence_df, pd.to_datetime(current_date))
+
+if sprint_name:
+    st.sidebar.info(f"Current Sprint: {sprint_name}")
+    st.sidebar.write(f"⏱️ Sprint Duration: {sprint_duration} days")
+    st.sidebar.write(f"📊 Days into Sprint: {days_into_sprint}")
+else:
+    st.sidebar.warning("No active sprint found for this date.")
+    # Fallback to manual inputs
+    sprint_duration = st.sidebar.slider("Sprint Duration (days)", 5, 21, 10)
+    days_into_sprint = st.sidebar.slider("Days into Sprint", 0, sprint_duration-1, 5)
+
+
 test_date = pd.to_datetime("2026-05-15")
 mask = (cadence_df["week_start"] <= test_date) & (test_date <= cadence_df["week_end"])
 rows_in_week = cadence_df.loc[mask]
@@ -798,6 +1006,9 @@ with tab1:
         st.session_state.total_active_stages = total_active_stages   
         st.session_state.active_releases = active_releases
         st.session_state.target_release = target_release
+        st.session_state.current_inputs = {"story_points": story_points, "priority": priority, "affected_components": affected_components,
+                                            "is_mid_sprint": is_mid_sprint, "days_into_sprint": days_into_sprint, "sprint_duration": sprint_duration,
+                                            "current_work_story_points": current_work_story_points, "current_work_priority": current_work_priority}
 
     # ------------------------------------------------------------
     # IMPACT ASSESSMENT KPI ROW
