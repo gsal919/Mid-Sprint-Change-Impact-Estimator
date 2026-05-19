@@ -1,0 +1,13 @@
+team_id,name,location,headcount,hours_per_week,type
+1,Amazon,NZ,6,240,Scrum
+2,Nile,NZ,7,280,Scrum
+3,Yangtze,NZ,8,320,Scrum
+4,Yenisei,NZ,9,360,Scrum
+5,Mississippi,NZ,10,400,Scrum
+6,Waikato,Overseas,3,120,Scrum
+7,Ganga,Overseas,5,200,Scrum
+,,,,,
+,,,,,
+,,,,,
+,,,,,
+,,,,,
