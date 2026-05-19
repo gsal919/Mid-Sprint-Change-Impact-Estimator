@@ -1,7 +1,0 @@
-team_id,name,location,headcount,hours_per_week,type
-1,Scrum Team 1,NZ,6,240,Scrum
-2,Scrum Team 2,NZ,7,280,Scrum
-3,Scrum Team 3,NZ,8,320,Scrum
-4,Scrum Team 4,NZ,9,360,Scrum
-5,Scrum Team 5,NZ,10,400,Scrum
-6,Scrum Team 6,Overseas,3,120,Scrum
