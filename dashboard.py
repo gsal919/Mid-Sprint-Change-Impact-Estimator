@@ -27,12 +27,19 @@ st.set_page_config(
 # CUSTOM CSS
 # ============================================================================
 
+
+
 st.markdown("""
 <style>
 
 /* Main background */
 .stApp {
     background-color: #F5F7FA;
+}
+            
+@font-face {
+    font-family: 'Univers';
+    src: url('assets/UniversCnBold.ttf') format('truetype');
 }
 
 /* KPI Cards */
@@ -296,7 +303,7 @@ def parallel_impact(target_release, delay_days, active_stages):
 
 priority_mult = {"Low":0.3, "Medium":0.6, "High":0.9, "Critical":1.2}
 
-def build_full_timeline(cadence_df, start_date, finish_date,delay_days=0):
+def build_full_timeline(cadence_df, start_date, finish_date, current_date, delay_days=0):
     """
     Build timeline between selected start and finish dates.
     If delay_days > 0, future end dates are shifted.
@@ -328,9 +335,9 @@ def build_full_timeline(cadence_df, start_date, finish_date,delay_days=0):
 
             end = row["week_end"]
             # Apply delay to all weeks that start after the current date
-            if delay_days > 0 and start > pd.Timestamp.today():
-                end = end + pd.Timedelta(days=delay_days)
-                start = start + pd.Timedelta(days=delay_days)
+            if delay_days > 0 and start > current_date:
+                start += pd.Timedelta(days=delay_days)
+                end += pd.Timedelta(days=delay_days)
             rows.append({
                 "Release": rel,
                 "Stage": stage.strip(),
@@ -341,6 +348,37 @@ def build_full_timeline(cadence_df, start_date, finish_date,delay_days=0):
 
 
 
+# Load teams with skills
+teams_df = data["teams"].copy()
+teams_df["headcount"] = pd.to_numeric(teams_df["headcount"], errors="coerce")
+
+# Ensure skills column exists and is string
+if "skills" not in teams_df.columns:
+    st.error("Teams CSV missing 'skills' column. Please add it.")
+    st.stop()
+
+teams_df["skills"] = teams_df["skills"].fillna("").astype(str)
+
+def get_total_capacity_for_components(teams_df, selected_components):
+    """
+    Returns total hours per week and list of contributing teams.
+    """
+    if not selected_components:
+        # If no component selected, default to using all teams? 
+        # Better to use the first team as fallback.
+        return teams_df.iloc[0]["hours_per_week"], [teams_df.iloc[0]["name"]]
+    
+    total_hours = 0
+    contributing_teams = []
+    for _, team in teams_df.iterrows():
+        team_skills = [s.strip().lower() for s in team["skills"].split(",")]
+        if any(comp.lower() in team_skills for comp in selected_components):
+            total_hours += team["hours_per_week"]
+            contributing_teams.append(team["name"])
+    # If no team matches, fallback to first team
+    if total_hours == 0:
+        return teams_df.iloc[0]["hours_per_week"], [teams_df.iloc[0]["name"]]
+    return total_hours, contributing_teams
 
 
 def get_current_sprint_from_cadence(cadence_df, current_date):
@@ -373,14 +411,27 @@ def get_current_sprint_from_cadence(cadence_df, current_date):
     sprint_end = row["sprint_end"]
     #sprint_duration = (sprint_end - sprint_start).days
     sprint_duration = 10
-    days_into_sprint = (current_date - sprint_start).days
+    #days_into_sprint = (current_date - sprint_start).days
+    days_into_sprint = np.busday_count(sprint_start.date(), current_date.date())+1 # count business days to be more realistic
     return sprint_name, sprint_duration, days_into_sprint
+
+@st.cache_data
+def load_skill_capacity():
+    df = pd.read_csv("data/resource_types.csv")
+    # Aggregate by skill (e.g., QA sum of all QA roles)
+    skill_cap = df.groupby("skill")["count"].sum().to_dict()
+    # Convert to weekly hours (40h per person)
+    for skill in skill_cap:
+        skill_cap[skill] = skill_cap[skill] * 40
+    return skill_cap
 
 # ============================================================================
 # FEATURE ENGINEERING – EXACT MATCH TO TRAINING (13 features)
 # ============================================================================
 def engineer_ml_features(story_points, days_into_sprint, sprint_duration,
                          priority, affected_components, is_mid_sprint,
+                         team_headcount, base_remaining_capacity_hours,
+                         utilisation_factor, available_capacity_ratio,
                          item_type="User Story"):
     """
     Generate the exact 13 features used during LightGBM training.
@@ -404,7 +455,7 @@ def engineer_ml_features(story_points, days_into_sprint, sprint_duration,
     remaining_sprint_pct = max(0, 1 - sprint_progress)
 
     # Engineered features (same formulas as in training)
-    complexity_score = story_points * affected_components
+    complexity_score = float(story_points * affected_components)
     predicted_risk_proxy = story_points * 0.5 + affected_components * 0.3 + sprint_progress * 10
     # sprint_task_load: we don't have actual sprint plan, use a heuristic based on story points
     # (the model was trained with values from generated data, but a reasonable estimate works)
@@ -418,19 +469,23 @@ def engineer_ml_features(story_points, days_into_sprint, sprint_duration,
     # Build feature dictionary in the exact order expected by the model
     # (order does not matter for LightGBM as long as column names match)
     features = {
-        "story_points": story_points,
-        "days_into_sprint": days_into_sprint,
-        "sprint_duration": sprint_duration,
-        "sprint_progress_at_creation": sprint_progress,
-        "remaining_sprint_pct": remaining_sprint_pct,
-        "complexity_score": complexity_score,
-        "predicted_risk_proxy": predicted_risk_proxy,
-        "sprint_task_load": sprint_task_load,
-        "has_estimate": has_estimate,
-        "has_story_points": has_story_points,
-        "story_points_log": story_points_log,
-        "priority_encoded": priority_encoded,
-        "item_type_encoded": item_type_encoded,
+        "story_points": float(story_points),
+        "days_into_sprint": float(days_into_sprint),
+        "sprint_duration": float(sprint_duration),
+        "sprint_progress_at_creation": float(sprint_progress),
+        "remaining_sprint_pct": float(remaining_sprint_pct),
+        "complexity_score": float(complexity_score),
+        "predicted_risk_proxy": float(predicted_risk_proxy),
+        "sprint_task_load": float(sprint_task_load),
+        "has_estimate": float(has_estimate),
+        "has_story_points": float(has_story_points),
+        "story_points_log": float(story_points_log),
+        "priority_encoded": float(priority_encoded),
+        "item_type_encoded": float(item_type_encoded),
+        "team_headcount" : float(team_headcount), 
+        "base_remaining_capacity_hours": float(base_remaining_capacity_hours),
+        "utilisation_factor": float(utilisation_factor),
+        "available_capacity_ratio": float(available_capacity_ratio)
     }
 
     df = pd.DataFrame([features])
@@ -453,6 +508,9 @@ def engineer_ml_features(story_points, days_into_sprint, sprint_duration,
 # ============================================================================
 def predict_impact_ml(story_points, days_into_sprint, sprint_duration, priority,
                       affected_components, team_capacity, is_mid_sprint,
+                      team_headcount=None,
+                      base_remaining_capacity_hours=None, utilisation_factor=None,
+                      available_capacity_ratio=None,
                       item_type="User Story"):
     """
     Hybrid prediction: use LightGBM models if available, otherwise heuristic.
@@ -476,14 +534,18 @@ def predict_impact_ml(story_points, days_into_sprint, sprint_duration, priority,
             spillover_prob = adjusted_effort / remaining_capacity if remaining_capacity > 0 else 0
             delay_days = 0
         return spillover_prob, delay_days
+    
 
     # ---------- ML prediction ----------
     if ml_models and ml_models.get("spillover") and ml_models.get("regression"):
         try:
             X = engineer_ml_features(story_points, days_into_sprint, sprint_duration,
                                      priority, affected_components, is_mid_sprint,
+                                     team_headcount, base_remaining_capacity_hours,
+                                    utilisation_factor, available_capacity_ratio,
                                      item_type=item_type)
             spillover_prob = ml_models["spillover"].predict_proba(X)[0][1]
+            spillover_prob = 0.1 + 0.8*(spillover_prob ** 2)
             delay_days = ml_models["regression"].predict(X)[0]
             used_ml = True
         except Exception as e:
@@ -498,10 +560,10 @@ def predict_impact_ml(story_points, days_into_sprint, sprint_duration, priority,
     delay_days = max(0, delay_days)
 
     # Business logic for recommendation
-    if spillover_prob < 0.33:
+    if spillover_prob < 0.50:
         recommendation = "Accept in current sprint"
         risk = "Low"
-    elif spillover_prob < 0.66:
+    elif spillover_prob < 0.75:
         recommendation = "Accept with monitoring"
         risk = "Medium"
     else:
@@ -513,7 +575,7 @@ def predict_impact_ml(story_points, days_into_sprint, sprint_duration, priority,
         "delay_days": delay_days,
         "recommendation": recommendation,
         "risk": risk,
-        "sprint_fit": spillover_prob < 0.5,
+        "sprint_fit": spillover_prob < 0.75,
         "used_ml": used_ml
     }
 
@@ -684,7 +746,7 @@ if data is not None:
     st.sidebar.markdown("---")
     st.sidebar.subheader("🤖 AI Work Item Suggestion")
 
-    change_desc = st.sidebar.text_area("Describe the change", placeholder="e.g., Payment Confirmation for Card Update", height=80, key="ai_desc_2")
+    change_desc = st.sidebar.text_area("Describe the change", placeholder="e.g., Add biometric authentication for iOS users", height=80, key="ai_desc_2")
 
     if st.sidebar.button("Suggest Work Item"):
         if change_desc.strip():
@@ -799,20 +861,23 @@ if data is not None:
                     df = data["work_items"]
                     us_row = df[(df["level"] == "User Story") & (df["name"] == selected_us)]
                     if not us_row.empty:
-                        story_points = us_row.iloc[0]["story_points"]
-                        st.sidebar.info(f"📊 **Story Points:** {story_points}")
+                        #story_points = us_row.iloc[0]["story_points"]
+                        #st.sidebar.info(f"📊 **Story Points:** {story_points}")
+                        default_story_points = int(us_row.iloc[0]["story_points"])
+                        story_points = st.sidebar.slider("📊 Story Points", min_value=1, max_value=13, value=default_story_points, step=1)
+                        st.sidebar.info(f"Selected Story Points: {story_points}")
                     else:
-                        story_points = st.number_input("Story Points", min_value=0.5, max_value=21.0, value=5.0, step=0.5)
+                        story_points = st.number_input("Story Points", min_value=1, max_value=21, value=5, step=1)
                 else:
-                    story_points = st.number_input("Story Points", min_value=0.5, max_value=21.0, value=5.0, step=0.5)
+                    story_points = st.number_input("Story Points", min_value=1, max_value=21, value=5, step=1)
             else:
-                story_points = st.number_input("Story Points", min_value=0.5, max_value=21.0, value=5.0, step=0.5)
+                story_points = st.number_input("Story Points", min_value=1, max_value=21, value=5, step=1)
         else:
-            story_points = st.number_input("Story Points", min_value=0.5, max_value=21.0, value=5.0, step=0.5)
+            story_points = st.number_input("Story Points", min_value=1, max_value=21, value=5, step=1)
     else:
-        story_points = st.number_input("Story Points", min_value=0.5, max_value=21.0, value=5.0, step=0.5)
+        story_points = st.number_input("Story Points", min_value=1, max_value=21, value=5, step=1)
 else:
-    story_points = st.number_input("Story Points", min_value=0.5, max_value=21.0, value=5.0, step=0.5)
+    story_points = st.number_input("Story Points", min_value=1, max_value=21, value=5, step=1)
 
 
     
@@ -827,11 +892,11 @@ st.sidebar.subheader("🚨 Change Impact")
 priority = st.sidebar.select_slider("**Priority**", options=["Low", "Medium", "High", "Critical"], value="Medium")
 #affected_components = st.sidebar.slider("**Affected Components**", min_value=1, max_value=5, value=1)
 st.sidebar.subheader("🔧 Affected Components")
-component_options = ["iOS", "Android", "Platform", "Backend", "QA", "DevOps", "Database"]
+component_options = ["iOSDev", "AndroidDev", "PlatformDev", "ManualQA", "AutomationQA", "PerformanceQA", "Delivery", "BA", "SM", "Architect"]
 selected_components = st.sidebar.multiselect(
     "Select affected components",
     options=component_options,
-    default=["Platform"],
+    default=["PlatformDev"],
     help="Each additional component increases coordination effort and risk."
 )
 affected_components = len(selected_components) if selected_components else 1
@@ -862,7 +927,7 @@ if sprint_name:
 else:
     st.sidebar.warning("No active sprint found for this date.")
     # Fallback to manual inputs
-    sprint_duration = st.sidebar.slider("Sprint Duration (days)", 5, 21, 10)
+    sprint_duration = st.sidebar.slider("Sprint Duration (days)", 5, 20, 10)
     days_into_sprint = st.sidebar.slider("Days into Sprint", 0, sprint_duration-1, 5)
 
 
@@ -871,11 +936,15 @@ mask = (cadence_df["week_start"] <= test_date) & (test_date <= cadence_df["week_
 rows_in_week = cadence_df.loc[mask]
 #st.write("Rows for 2026-05-15:", rows_in_week)
 #st.write("Cadence date range:", cadence_df["week_start"].min(), "to", cadence_df["week_end"].max())
+
+# Initialize target_release to None
+target_release = None
 active_releases = get_active_releases(cadence_df, pd.to_datetime(current_date))
-if not active_releases:
-    st.warning("No active releases found for the selected date. Please adjust the date.")
-else:
+if active_releases:
+    
     target_release = st.sidebar.selectbox("Select the release for this change request", active_releases)
+else:
+    st.warning("No active releases found for the selected date. Please adjust the date.")
     #st.caption(f"Active releases on {current_date}: {', '.join(active_releases)}")
  
 original_cadence = load_release_cadence()
@@ -884,27 +953,85 @@ current_date_ts = pd.to_datetime(current_date)
 total_active_stages = get_total_active_stages(original_cadence, current_date_ts)
 default_util_pct = min(90, (total_active_stages-1) * 15)
 
-if data is not None:
-    teams = data["teams"]["name"].tolist()
-    selected_team = st.sidebar.selectbox("**Team**", teams)
-    team_row = data["teams"][data["teams"]["name"] == selected_team]
-    if len(team_row) > 0:
-        weekly_team_capacity = team_row.iloc[0]["hours_per_week"]
-        team_capacity = weekly_team_capacity * (sprint_duration / 5)  # scale to sprint duration (assuming 14-day baseline)
-        team_location = team_row.iloc[0]["location"]
-                
-        used_capacity = team_capacity * (days_into_sprint / sprint_duration)*(1+(default_util_pct/100))
+# Load skill capacity dictionary
+skill_capacity = load_skill_capacity()
+
+
+# ----------------------------------------------------------------
+# TEAM & CAPACITY CALCULATION (runs every time, not only on button click)
+# ----------------------------------------------------------------
+if data is not None and "teams" in data:
+    teams_df = data["teams"]
+    selected_team = st.sidebar.selectbox("**Team**", teams_df["name"].tolist())
+    team_row = teams_df[teams_df["name"] == selected_team]
+
+    if not team_row.empty:
+        team_row = team_row.iloc[0]  # now a Series
+        weekly_team_capacity = float(team_row["hours_per_week"])
+        team_headcount = int(team_row["headcount"])
+
+        # Skills (if present)
+        if "skills" in team_row.index:
+            skills_val = team_row["skills"]
+            if pd.notna(skills_val):
+                team_skills = set(skill.strip() for skill in str(skills_val).split(","))
+            else:
+                team_skills = set()
+        else:
+            team_skills = set()
+
+        # Extra capacity from selected components (if any)
+        extra_weekly = 0
+        if selected_components:
+            for comp in selected_components:
+                total_headcount = skill_capacity.get(comp, 0) // 40   # hours -> headcount
+                if comp in team_skills:
+                    extra_headcount = max(0, total_headcount - 1)
+                else:
+                    extra_headcount = total_headcount
+                extra_weekly += extra_headcount * 40
+
+        total_weekly_capacity = weekly_team_capacity + extra_weekly
+        team_capacity = total_weekly_capacity * (sprint_duration / 5)
+
+        # Compute capacity features for ML
+        sprint_progress = days_into_sprint / sprint_duration if sprint_duration > 0 else 0
+        #base_remaining_capacity_hours = team_capacity * (1 - sprint_progress)
+        utilisation_factor = default_util_pct / 100.0
+        
+
+        # Used/remaining for display
+        used_capacity = team_capacity * sprint_progress
         remaining_capacity = team_capacity - used_capacity
+        availablecapacity = remaining_capacity * (1 - default_util_pct/100)
+        base_remaining_capacity_hours = availablecapacity
+        available_capacity_ratio = base_remaining_capacity_hours / team_capacity if team_capacity > 0 else 0.0
 
-        #st.caption(f"📍 {team_location} | 💪 {team_capacity} hrs/sprint | 📊 Remaining Capacity {remaining_capacity:.0f} hrs | {remaining_capacity/(team_capacity * (days_into_sprint / sprint_duration if sprint_duration > 0 else 0)):.0%}")
+        # Debug (optional)
+        # st.write(f"team_headcount: {team_headcount}, base_remaining: {base_remaining_capacity_hours}")
     else:
-        team_capacity = 640
+        # Fallback values
+        st.warning(f"Team '{selected_team}' not found. Using defaults.")
+        team_headcount = 5
+        weekly_team_capacity = 200
+        team_capacity = 200 * (sprint_duration / 5)
+        sprint_progress = days_into_sprint / sprint_duration if sprint_duration > 0 else 0
+        base_remaining_capacity_hours = team_capacity * (1 - sprint_progress)
+        utilisation_factor = default_util_pct / 100.0
+        available_capacity_ratio = base_remaining_capacity_hours / team_capacity if team_capacity > 0 else 0.0
+        used_capacity = team_capacity * sprint_progress
+        remaining_capacity = team_capacity - used_capacity
+        availablecapacity = remaining_capacity * (1 - default_util_pct/100)
 else:
-    selected_team = "Scrum Team 3"
-    team_capacity = 640
-    
-
-
+    # No data loaded – fallback
+    team_headcount = 5
+    team_capacity = 400
+    used_capacity = 0
+    remaining_capacity = team_capacity
+    availablecapacity = team_capacity
+    base_remaining_capacity_hours = team_capacity
+    utilisation_factor = 0.5
+    available_capacity_ratio = 0.5
         # ================================================================
 
         # CURRENT ACTIVE WORK
@@ -958,7 +1085,9 @@ with tab1:
     with k2:
         st.metric("💪 Team Capacity", f"{team_capacity} hrs/sprint")
     with k3:
-        st.metric("👥 Remaining Capacity", f"{remaining_capacity:.0f} hrs or " f"{remaining_capacity/team_capacity:.0%} ")
+        #st.metric("👥 Remaining Capacity", f"{remaining_capacity:.0f} hrs or " f"{remaining_capacity/team_capacity:.0%} ")
+        st.metric("👥 Available Capacity", f"{availablecapacity:.0f} hrs or " f"{availablecapacity/team_capacity:.0%} ")
+        
 
 
 
@@ -973,10 +1102,16 @@ with tab1:
         # Pass item_type to the prediction function
         result = predict_impact_ml(story_points, days_into_sprint, sprint_duration,
                                     priority, affected_components, team_capacity,
-                                    is_mid_sprint, item_type=item_type)
+                                    is_mid_sprint, team_headcount=team_headcount,
+                                    base_remaining_capacity_hours=base_remaining_capacity_hours,
+                                    utilisation_factor=utilisation_factor,
+                                    available_capacity_ratio=available_capacity_ratio, item_type=item_type)
         
         current_work_result = predict_impact_ml(current_work_story_points, days_into_sprint, sprint_duration, current_work_priority,
-                                    affected_components, team_capacity, is_mid_sprint, item_type="User Story")
+                                    affected_components, team_capacity, is_mid_sprint, team_headcount=team_headcount,
+                                    base_remaining_capacity_hours=base_remaining_capacity_hours,
+                                    utilisation_factor=utilisation_factor,
+                                    available_capacity_ratio=available_capacity_ratio, item_type="User Story")
 
         completion_pct = (days_into_sprint / sprint_duration if sprint_duration > 0 else 0)
 
@@ -1081,7 +1216,7 @@ with tab1:
 
                 finish_date = current_date_ts + pd.Timedelta(weeks=21)
 
-                full_timeline_df = build_full_timeline(cadence_df=cadence_df, start_date=current_date_ts, finish_date=finish_date, delay_days=result['delay_days'])
+                full_timeline_df = build_full_timeline(cadence_df=cadence_df, start_date=current_date_ts, finish_date=finish_date, current_date=current_date_ts, delay_days=result['delay_days'])
                 
                 if not full_timeline_df.empty:
                     fig = px.timeline(
