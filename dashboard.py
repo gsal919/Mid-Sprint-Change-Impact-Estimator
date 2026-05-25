@@ -259,7 +259,7 @@ def load_models():
         return None
     try:
         models["spillover"] = joblib.load(os.path.join(model_dir, "classifier_spillover_lgb.pkl"))
-        models["regression"] = joblib.load(os.path.join(model_dir, "regressor_delay_days_lgb.pkl"))
+        models["regression"] = joblib.load(os.path.join(model_dir, "regressor_delay_days.pkl"))
         # No scaler needed for LightGBM (tree‑based)
         models["scaler"] = None
         # Get the exact feature names the model expects
