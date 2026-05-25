@@ -58,7 +58,7 @@ print("\nEngineering features...")
 # 1. Sprint progress (from days_into_sprint and fixed sprint_duration = 14 days)
 # In the generator, sprint duration is 14 days (2 weeks). We can infer sprint_duration = 14.
 if "sprint_duration" not in df.columns:
-    df["sprint_duration"] = 14
+    df["sprint_duration"] = 10
 df["sprint_progress_at_creation"] = df["days_into_sprint"] / df["sprint_duration"]
 df["remaining_sprint_pct"] = 1 - df["sprint_progress_at_creation"]
 
@@ -83,6 +83,8 @@ df["story_points_log"] = np.log1p(df["story_points"])
 priority_map = {"Low":0, "Medium":1, "High":2, "Critical":3}
 df["priority_encoded"] = df["priority"].map(priority_map)
 
+df["available_capacity_ratio"] = df["base_remaining_capacity_hours"] / df["team_capacity_hours"].clip(lower=1)
+
 # work_item_level and item_type are identical here; keep one
 if "work_item_level" in df.columns:
     level_map = {"Epic":0, "Feature":1, "Business Story":2, "User Story":3, "Task":4}
@@ -104,6 +106,9 @@ feature_candidates = [
     "complexity_score", "predicted_risk_proxy", "sprint_task_load",
     "has_estimate", "has_story_points", "story_points_log",
     "priority_encoded", "item_type_encoded"
+    # NEW capacity features
+    "team_capacity_hours", "team_headcount",
+    "base_remaining_capacity_hours", "utilisation_factor", "available_capacity_ratio"
 ]
 
 # Keep only columns that exist
