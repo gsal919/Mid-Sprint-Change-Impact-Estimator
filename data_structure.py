@@ -32,12 +32,14 @@ class FiservDataGenerator:
         # Teams (6 teams with capacities)
         # ------------------------------------------------------------
         self.teams = [
-            {"team_id": 1, "name": "Scrum Team 1", "location": "NZ", "headcount": 6, "hours_per_week": 240, "type": "Scrum"},
-            {"team_id": 2, "name": "Scrum Team 2", "location": "NZ", "headcount": 7, "hours_per_week": 280, "type": "Scrum"},
-            {"team_id": 3, "name": "Scrum Team 3", "location": "NZ", "headcount": 8, "hours_per_week": 320, "type": "Scrum"},
-            {"team_id": 4, "name": "Scrum Team 4", "location": "NZ", "headcount": 9, "hours_per_week": 360, "type": "Scrum"},
-            {"team_id": 5, "name": "Scrum Team 5", "location": "NZ", "headcount": 10, "hours_per_week": 400, "type": "Scrum"},
-            {"team_id": 6, "name": "Scrum Team 6", "location": "Overseas", "headcount": 3, "hours_per_week": 120, "type": "Scrum"}
+            {"team_id": 1, "name": "Amazon", "location": "NZ", "headcount": 6, "hours_per_week": 240, "type": "Scrum"},
+            {"team_id": 2, "name": "Nile", "location": "NZ", "headcount": 7, "hours_per_week": 280, "type": "Scrum"},
+            {"team_id": 3, "name": "Yangtze", "location": "NZ", "headcount": 8, "hours_per_week": 320, "type": "Scrum"},
+            {"team_id": 4, "name": "Yenisei", "location": "NZ", "headcount": 9, "hours_per_week": 360, "type": "Scrum"},
+            {"team_id": 5, "name": "Mississippi", "location": "NZ", "headcount": 10, "hours_per_week": 400, "type": "Scrum"},
+            {"team_id": 6, "name": "Waikato", "location": "Overseas", "headcount": 3, "hours_per_week": 120, "type": "Scrum"},
+            {"team_id": 7, "name": "Ganga", "location": "Overseas", "headcount": 5, "hours_per_week": 200, "type": "Scrum"},
+            {"team_id": 8, "name": "Congo", "location": "Overseas", "headcount": 4, "hours_per_week": 160, "type": "Scrum"}
         ]
         
         # ------------------------------------------------------------
@@ -60,79 +62,79 @@ class FiservDataGenerator:
         # Work item hierarchy templates (Epic, Feature, Business Story, User Story, Task)
         # ------------------------------------------------------------
         self.epic_templates = [
-            {"name": "Accounts", "story_points": 53},
-            {"name": "Payments", "story_points": 30},
-            {"name": "Security", "story_points": 19},
-            {"name": "Reporting", "story_points": 18},
-            {"name": "Notifications", "story_points": 10}
+            {"name": "Accounts", "story_points": 55},
+            {"name": "Payments", "story_points": 55},
+            {"name": "Security", "story_points": 55},
+            {"name": "Reporting", "story_points": 55},
+            {"name": "Notifications", "story_points": 55}
         ]
         
         self.feature_templates = {
             "Accounts": [
-                {"name": "User Registration", "story_points": 6},
-                {"name": "User Profile", "story_points": 8},
-                {"name": "Account Settings", "story_points": 8},
-                {"name": "Cards", "story_points": 43}
+                {"name": "User Registration", "story_points": 34},
+                {"name": "User Profile", "story_points": 34},
+                {"name": "Account Settings", "story_points": 21},
+                {"name": "Cards", "story_points": 34}
             ],
             "Payments": [
-                {"name": "Payment Gateway", "story_points": 9},
-                {"name": "Transaction History", "story_points": 7},
-                {"name": "Refunds", "story_points": 8},
-                {"name": "Recurring Billing", "story_points": 6}
+                {"name": "Payment Gateway", "story_points": 34},
+                {"name": "Transaction History", "story_points": 34},
+                {"name": "Refunds", "story_points": 34},
+                {"name": "Recurring Billing", "story_points": 21}
             ],
             "Security": [
-                {"name": "Authentication", "story_points": 7},
-                {"name": "Authorization", "story_points": 5},
-                {"name": "Audit Logs", "story_points": 4},
-                {"name": "Encryption", "story_points": 3}
+                {"name": "Authentication", "story_points": 34},
+                {"name": "Authorization", "story_points": 34},
+                {"name": "Audit Logs", "story_points": 21},
+                {"name": "Encryption", "story_points": 21}
             ],
             "Reporting": [
-                {"name": "Dashboard", "story_points": 6},
-                {"name": "Custom Reports", "story_points": 5},
-                {"name": "Data Export", "story_points": 3},
-                {"name": "Scheduled Reports", "story_points": 4}
+                {"name": "Dashboard", "story_points": 34},
+                {"name": "Custom Reports", "story_points": 34},
+                {"name": "Data Export", "story_points": 21},
+                {"name": "Scheduled Reports", "story_points": 21}
             ],
             "Notifications": [
-                {"name": "Email Service", "story_points": 4},
-                {"name": "Push Notifications", "story_points": 3},
-                {"name": "In-App Messages", "story_points": 2},
-                {"name": "SMS Alerts", "story_points": 1}
+                {"name": "Email Service", "story_points": 21},
+                {"name": "Push Notifications", "story_points": 21},
+                {"name": "In-App Messages", "story_points": 21},
+                {"name": "SMS Alerts", "story_points": 21}
             ]
         }
         
         self.business_story_templates = {
             "Cards": [
-                {"name": "Add Card", "story_points": 25},
-                {"name": "Remove Card", "story_points": 15},
-                {"name": "Update Card", "story_points": 10},
-                {"name": "View Cards", "story_points": 3}
+                {"name": "Add Card", "story_points": 13},
+                {"name": "Remove Card", "story_points": 13},
+                {"name": "Update Card", "story_points": 13},
+                {"name": "View Cards", "story_points": 12}
             ],
             "User Registration": [
-                {"name": "Sign Up", "story_points": 3},
-                {"name": "Email Verification", "story_points": 2},
-                {"name": "Password Reset", "story_points": 1}
+                {"name": "Sign Up", "story_points": 11},
+                {"name": "Email Verification", "story_points": 10},
+                {"name": "Password Reset", "story_points": 10}
             ],
             "Payment Gateway": [
-                {"name": "Process Payment", "story_points": 6},
-                {"name": "Payment Validation", "story_points": 2},
-                {"name": "Payment Callback", "story_points": 1}
+                {"name": "Process Payment", "story_points": 9},
+                {"name": "Payment Validation", "story_points": 9},
+                {"name": "Payment Callback", "story_points": 9}
             ]
         }
         
         self.user_story_templates = {
             "Add Card": [
-                {"name": "Display Card Menu", "story_points": 7},
-                {"name": "Display Card Screen", "story_points": 5},
-                {"name": "Make a transfer", "story_points": 4},
-                {"name": "Review transfer", "story_points": 2},
-                {"name": "Transaction history", "story_points": 3},
-                {"name": "Send email", "story_points": 1},
+                {"name": "Display Card Menu", "story_points": 8},
+                {"name": "Display Card Screen", "story_points": 8},
+                {"name": "Make a transfer", "story_points": 5},
+                {"name": "Review transfer", "story_points": 5},
+                {"name": "Transaction history", "story_points": 5},
+                {"name": "Send email", "story_points": 5},
                 {"name": "Verify Email", "story_points": 3}
             ],
             "Process Payment": [
-                {"name": "Payment Form", "story_points": 2},
+                {"name": "Payment Form", "story_points": 5},
                 {"name": "Payment Confirmation", "story_points": 3},
-                {"name": "Error Handling", "story_points": 1}
+                {"name": "Error Handling", "story_points": 3}
             ]
         }
         
@@ -259,7 +261,7 @@ class FiservDataGenerator:
         all_tasks_flat = [t for sublist in self.task_templates.values() for t in sublist]
         
         # Story point distribution for User Stories (realistic)
-        us_sp = random.randint(3, 13)
+        #us_sp = random.randint(3, 8)
         
         while task_count < target_tasks:
             # Epic
@@ -301,11 +303,11 @@ class FiservDataGenerator:
                     item_id += 1
                     
                     # User Stories
-                    num_us = random.randint(2,4)
+                    num_us = random.randint(1,3)
                     us_list = random.sample(all_us, min(num_us, len(all_us)))
                     for us_template in us_list:
                         #us_sp = np.random.choice(us_sp_choices, p=us_sp_weights)
-                        us_sp = random.randint(3, 13)
+                        us_sp = random.choices([3, 4, 5, 6, 7, 8],weights=[10, 10, 50, 10, 10, 10])[0]
                         us_item = {
                             "work_item_id": item_id, "level": "User Story", "name": us_template["name"],
                             "story_points": us_sp, "parent_id": bs_item["work_item_id"],
@@ -317,10 +319,10 @@ class FiservDataGenerator:
                         
                         # Tasks
                         sprint = random.choice(self.sprints)
-                        num_tasks = random.randint(3,7)
+                        num_tasks = random.randint(1,5)
                         for _ in range(num_tasks):
                             t = random.choice(all_tasks_flat)
-                            task_sp = random.choice([1,2,3,4])
+                            task_sp = random.choices([1,2,3], weights=[50, 30, 20])[0]
                             orig_est, rework, actual = self._get_effort_hours_for_task(task_sp)
                             task_item = {
                                 "work_item_id": item_id, "level": "Task", "name": t["name"],
@@ -364,7 +366,7 @@ class FiservDataGenerator:
 
         for i in range(num_changes):
             sprint = random.choice(self.sprints)
-            candidates = [w for w in self.work_items if w["level"] in ["User Story", "Task"]]
+            candidates = [w for w in self.work_items if w["level"] in ["User Story", "Task", "Business Story"]]
             if not candidates:
                 candidates = self.work_items
             work_item = random.choice(candidates)
@@ -396,7 +398,7 @@ class FiservDataGenerator:
             timing_penalty = 1 + (sprint_progress * 0.7)
 
             priority_factor = {"Low":0.3, "Medium":0.6, "High":0.9, "Critical":1.2}.get(work_item["priority"], 1.0)
-            complexity_multiplier = 1 + (story_pts / 15)
+            complexity_multiplier = 1 + (story_pts / 13)
             #dependency_multiplier = random.uniform(1.0, 2.5)
 
             impacted = (
@@ -468,6 +470,10 @@ class FiservDataGenerator:
             complexity_score = story_pts * (work_item.get("affected_components", 1))
             predicted_risk_proxy = story_pts * 0.5 + (work_item.get("affected_components", 1)) * 0.3 + sprint_progress * 10
             sprint_task_load = tasks_per_sprint.get(sprint["sprint_id"], avg_task_load)
+            utilisation_factor = utilisation
+            team_capacity_hours = sprint["capacity_hours"]               # total weekly capacity
+            team_headcount = sprint["headcount"]                         # team size
+            base_remaining = 0.6*sprint["capacity_hours"] * (1 - sprint_progress)   # capacity left without utilisation
 
             # Build change request record
             change = {
@@ -496,6 +502,10 @@ class FiservDataGenerator:
                 "complexity_score": round(complexity_score, 2),
                 "predicted_risk_proxy": round(predicted_risk_proxy, 2),
                 "sprint_task_load": sprint_task_load,
+                "team_capacity_hours": team_capacity_hours,
+                "team_headcount": team_headcount,
+                "base_remaining_capacity_hours": base_remaining,
+                "utilisation_factor": utilisation_factor,
                 "timing_penalty": round(timing_penalty, 2),
                 "priority_multiplier": priority_factor,
                 "recommendation": self._get_recommendation(spillover, sprint_progress, priority_factor)
