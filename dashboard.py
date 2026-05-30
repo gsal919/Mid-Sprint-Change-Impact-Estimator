@@ -455,11 +455,11 @@ def engineer_ml_features(story_points, days_into_sprint, sprint_duration,
     remaining_sprint_pct = max(0, 1 - sprint_progress)
 
     # Engineered features (same formulas as in training)
-    complexity_score = float(story_points * affected_components)
-    predicted_risk_proxy = story_points * 0.5 + affected_components * 0.3 + sprint_progress * 10
+    complexity_score = float(story_points * (0.5*affected_components))
+    predicted_risk_proxy = story_points * 0.5 + affected_components * 0.1 + sprint_progress * 10
     # sprint_task_load: we don't have actual sprint plan, use a heuristic based on story points
     # (the model was trained with values from generated data, but a reasonable estimate works)
-    sprint_task_load = min(20, int(story_points * 1.5) + affected_components)
+    sprint_task_load = min(21, int(story_points * 1.5) + affected_components)
 
     # Derived flags
     has_estimate = 1
@@ -521,8 +521,8 @@ def predict_impact_ml(story_points, days_into_sprint, sprint_duration, priority,
         priority_mult = {"Low":0.3, "Medium":0.6, "High":0.9, "Critical":1.2}
         multiplier = priority_mult.get(priority, 1.0)
         timing_penalty = 1 + (sprint_progress * 0.8)
-        component_mult = 1 + (affected_components - 1) * 0.15
-        component_mult = min(component_mult, 1.8)
+        component_mult = 0.2 + (affected_components - 1) * 0.15
+        component_mult = min(component_mult, 1.0)
         mid_sprint_penalty = 1.2 if is_mid_sprint else 1.0
         base_effort = story_points * 6
         adjusted_effort = base_effort * multiplier * timing_penalty * component_mult * mid_sprint_penalty
@@ -559,6 +559,7 @@ def predict_impact_ml(story_points, days_into_sprint, sprint_duration, priority,
     # Ensure delay_days is not negative
     delay_days = max(0, delay_days)
 
+    
     # Business logic for recommendation
     if spillover_prob < 0.50:
         recommendation = "Accept in current sprint"
@@ -588,7 +589,7 @@ def get_hierarchy_options(data):
         return {}
     df = data["work_items"]
     hierarchy = {
-        "epics": df[df["level"] == "Epic"]["name"].tolist(),
+        "epics": df[df["level"] == "Epic"]["name"].unique().tolist(),
         "features": {},
         "business_stories": {},
         "user_stories": {},
@@ -737,11 +738,6 @@ if data is not None:
             cur = node["parent_id"]
         return " -> ".join(reversed(path))
 
-    # Create a compact summary of available epics, features, user stories for the AI prompt
-    #epic_list = work_items_df[work_items_df["level"] == "Epic"]["name"].unique().tolist()
-    #feature_list = work_items_df[work_items_df["level"] == "Feature"]["name"].unique().tolist()
-    #business_list = work_items_df[work_items_df["level"] == "Business Story"]["name"].unique().tolist()
-    #story_list = work_items_df[work_items_df["level"] == "User Story"]["name"].unique().tolist()
     
     st.sidebar.markdown("---")
     st.sidebar.subheader("🤖 AI Work Item Suggestion")
@@ -864,20 +860,20 @@ if data is not None:
                         #story_points = us_row.iloc[0]["story_points"]
                         #st.sidebar.info(f"📊 **Story Points:** {story_points}")
                         default_story_points = int(us_row.iloc[0]["story_points"])
-                        story_points = st.sidebar.slider("📊 Story Points", min_value=1, max_value=13, value=default_story_points, step=1)
-                        st.sidebar.info(f"Selected Story Points: {story_points}")
+                        story_points = st.sidebar.slider("📊 Story Points", min_value=1, max_value=21, value=default_story_points, step=1)
+                        st.sidebar.write(f"Selected Story Points: {story_points}")
                     else:
-                        story_points = st.number_input("Story Points", min_value=1, max_value=21, value=5, step=1)
+                        story_points = st.number_input("Story Points", min_value=1, max_value=21, value=3, step=1)
                 else:
-                    story_points = st.number_input("Story Points", min_value=1, max_value=21, value=5, step=1)
+                    story_points = st.number_input("Story Points", min_value=1, max_value=21, value=3, step=1)
             else:
-                story_points = st.number_input("Story Points", min_value=1, max_value=21, value=5, step=1)
+                story_points = st.number_input("Story Points", min_value=1, max_value=21, value=3, step=1)
         else:
-            story_points = st.number_input("Story Points", min_value=1, max_value=21, value=5, step=1)
+            story_points = st.number_input("Story Points", min_value=1, max_value=21, value=3, step=1)
     else:
-        story_points = st.number_input("Story Points", min_value=1, max_value=21, value=5, step=1)
+        story_points = st.number_input("Story Points", min_value=1, max_value=21, value=3, step=1)
 else:
-    story_points = st.number_input("Story Points", min_value=1, max_value=21, value=5, step=1)
+    story_points = st.number_input("Story Points", min_value=1, max_value=21, value=3, step=1)
 
 
     
@@ -890,7 +886,7 @@ else:
 st.sidebar.subheader("🚨 Change Impact")
 
 priority = st.sidebar.select_slider("**Priority**", options=["Low", "Medium", "High", "Critical"], value="Medium")
-#affected_components = st.sidebar.slider("**Affected Components**", min_value=1, max_value=5, value=1)
+
 st.sidebar.subheader("🔧 Affected Components")
 component_options = ["iOSDev", "AndroidDev", "PlatformDev", "ManualQA", "AutomationQA", "PerformanceQA", "Delivery", "BA", "SM", "Architect"]
 selected_components = st.sidebar.multiselect(
@@ -901,29 +897,33 @@ selected_components = st.sidebar.multiselect(
 )
 affected_components = len(selected_components) if selected_components else 1
 st.sidebar.caption(f"Total components affected: {affected_components}")
-#is_mid_sprint = st.checkbox("**Mid-Sprint Change Request**", value=True)
-is_mid_sprint = st.sidebar.toggle("Mid Sprint Change", value=True)
+
+
 
 # ----------------------------------------------------------------
 # SPRINT CONTEXT
 # ----------------------------------------------------------------
 st.sidebar.subheader("📅 Sprint Context")
 
-#sprint_duration = st.sidebar.slider("**Sprint Duration (days)**", min_value=5, max_value=21, value=10)
-#days_into_sprint = st.sidebar.slider("**Days into Sprint**", min_value=0, max_value=sprint_duration-1, value=5)
 
-#sprint_duration = 10
-#sprints_df = data["release_cadence"]
+
+
 cadence_df = load_release_cadence()
 
 current_date = st.sidebar.date_input("Current Date", date.today())
-#current_sprint, sprint_duration, days_into_sprint = get_current_sprint(sprints_df, pd.to_datetime(current_date))
+
+
 sprint_name, sprint_duration, days_into_sprint = get_current_sprint_from_cadence(cadence_df, pd.to_datetime(current_date))
 
+if days_into_sprint is None:
+    days_into_sprint = 0   
+is_mid_sprint = days_into_sprint > 1 and days_into_sprint < sprint_duration if sprint_duration else False
+
 if sprint_name:
-    st.sidebar.info(f"Current Sprint: {sprint_name}")
+    st.sidebar.write(f"Current Sprint: {sprint_name}")
     st.sidebar.write(f"⏱️ Sprint Duration: {sprint_duration} days")
     st.sidebar.write(f"📊 Days into Sprint: {days_into_sprint}")
+    st.sidebar.write(f"**Mid‑Sprint Change:** {'Yes' if is_mid_sprint else 'No'}")
 else:
     st.sidebar.warning("No active sprint found for this date.")
     # Fallback to manual inputs
@@ -934,8 +934,6 @@ else:
 test_date = pd.to_datetime("2026-05-15")
 mask = (cadence_df["week_start"] <= test_date) & (test_date <= cadence_df["week_end"])
 rows_in_week = cadence_df.loc[mask]
-#st.write("Rows for 2026-05-15:", rows_in_week)
-#st.write("Cadence date range:", cadence_df["week_start"].min(), "to", cadence_df["week_end"].max())
 
 # Initialize target_release to None
 target_release = None
@@ -945,13 +943,12 @@ if active_releases:
     target_release = st.sidebar.selectbox("Select the release for this change request", active_releases)
 else:
     st.warning("No active releases found for the selected date. Please adjust the date.")
-    #st.caption(f"Active releases on {current_date}: {', '.join(active_releases)}")
  
 original_cadence = load_release_cadence()
 current_date_ts = pd.to_datetime(current_date)
         
 total_active_stages = get_total_active_stages(original_cadence, current_date_ts)
-default_util_pct = min(90, (total_active_stages-1) * 15)
+default_util_pct = min(90, (total_active_stages-1) * 10)
 
 # Load skill capacity dictionary
 skill_capacity = load_skill_capacity()
@@ -1007,8 +1004,7 @@ if data is not None and "teams" in data:
         base_remaining_capacity_hours = availablecapacity
         available_capacity_ratio = base_remaining_capacity_hours / team_capacity if team_capacity > 0 else 0.0
 
-        # Debug (optional)
-        # st.write(f"team_headcount: {team_headcount}, base_remaining: {base_remaining_capacity_hours}")
+
     else:
         # Fallback values
         st.warning(f"Team '{selected_team}' not found. Using defaults.")
@@ -1038,10 +1034,9 @@ else:
 
         # ================================================================
 
-#st.markdown("### 🔄 Current Active Work")
 st.sidebar.subheader("🔄 Current Active Work")
 
-current_work_story_points = st.sidebar.slider("**Current Work Story Points**", min_value=0, max_value=6, value=3)
+current_work_story_points = st.sidebar.slider("**Current Work Story Points**", min_value=0, max_value=13, value=3)
 
 current_work_priority = st.sidebar.select_slider("**Current Work Priority**", options=["Low", "Medium", "High", "Critical"], value="Medium")
         
@@ -1061,9 +1056,7 @@ estimate_btn = st.sidebar.button("🚀 Run Impact Analysis", type="primary", use
 
 st.title("🏦 Fiserv - Mid-Sprint Change Impact Estimator Platform")
 
-st.markdown("""
-AI-powered delivery impact estimation for client scope changes
-""")
+st.info("""AI-powered delivery impact estimation for client scope changes""")
 
 tab1, tab2, tab3, tab4 = st.tabs([
     "📊 Impact Estimator", "📋 Work Item Hierarchy", "🏢 Release Structure", "📈 Data Overview"
@@ -1080,7 +1073,6 @@ with tab1:
     with k1:
         st.metric("🔄 Active Stages", f"{total_active_stages}")
 
-#team_utlization = remaining_capacity/(team_capacity * (days_into_sprint / sprint_duration if sprint_duration > 0 else 0))
 
     with k2:
         st.metric("💪 Team Capacity", f"{team_capacity} hrs/sprint")
@@ -1098,8 +1090,7 @@ with tab1:
 # MOCK PREDICTION ENGINE
 # ============================================================================
     if estimate_btn:
-        st.markdown("📊 Impact Assessment Results")
-        # Pass item_type to the prediction function
+        # Original predictions
         result = predict_impact_ml(story_points, days_into_sprint, sprint_duration,
                                     priority, affected_components, team_capacity,
                                     is_mid_sprint, team_headcount=team_headcount,
@@ -1113,27 +1104,29 @@ with tab1:
                                     utilisation_factor=utilisation_factor,
                                     available_capacity_ratio=available_capacity_ratio, item_type="User Story")
 
-        completion_pct = (days_into_sprint / sprint_duration if sprint_duration > 0 else 0)
 
-            
-        completion_pct = min(completion_pct, 1.0)
 
+        # If we reach here, no rollover needed → store original results
+        completion_pct = min(days_into_sprint / sprint_duration, 1.0)
+        
         remaining_current_work = (current_work_story_points* (1 - completion_pct))
 
         incoming_priority_value = (priority_mult.get(priority, 1.0))
         current_priority_value = (priority_mult.get(current_work_priority, 1.0))
 
-        reprioritisation_triggered = (incoming_priority_value > current_priority_value)
+        if completion_pct < 0.8:
+            reprioritisation_triggered = (incoming_priority_value > current_priority_value)
+        else:
+            reprioritisation_triggered = False
 
         additional_delay = (result["delay_days"]if reprioritisation_triggered else 0)
         
         total_current_work_delay = (current_work_result["delay_days"]+ additional_delay)
 
-            
-
             # Store in session state
         st.session_state.result = result
         st.session_state.current_work_result = current_work_result
+
         st.session_state.reprioritisation_triggered = reprioritisation_triggered
         st.session_state.additional_delay = additional_delay
         st.session_state.total_current_work_delay = total_current_work_delay
@@ -1156,24 +1149,78 @@ with tab1:
         total_current_work_delay = st.session_state.total_current_work_delay
         remaining_current_work = st.session_state.remaining_current_work
 
-        if result.get("used_ml", False):
-            st.info("🤖 Prediction based on trained LightGBM models.")
+        days_left = (sprint_duration - days_into_sprint) + sprint_duration  # time left in current sprint + next sprint (assuming spillover goes to next sprint)
+        if result["delay_days"] > days_left and days_left >= 0:
+            st.info(f"The model predicts a delay of {result['delay_days']:.1f} days, which exceeds the remaining time in this sprint ({sprint_duration - days_into_sprint} days) hence re-evaluating for next sprint).")
+            
+                # Reset parameters for next sprint
+            next_sprint_days_into = 0
+            next_sprint_duration = 10
+            next_base_remaining = team_capacity   # available capacity for next sprint
+            next_available_ratio = next_base_remaining / team_capacity if team_capacity > 0 else 0.0
+            # Call ML again with reset parameters (no recursion guard needed because we are in a button)
+            rollover_result = predict_impact_ml(story_points, next_sprint_days_into, next_sprint_duration,
+                                    priority, affected_components, team_capacity,
+                                    is_mid_sprint, team_headcount=team_headcount,
+                                    base_remaining_capacity_hours=next_base_remaining,  # reset to full capacity for next sprint
+                                    utilisation_factor=utilisation_factor,
+                                    available_capacity_ratio=next_available_ratio, item_type=item_type)
+            
+                # Store all session state variables with the rollover result and derived metrics
+            
+            st.session_state.rollover_result = rollover_result
+
+            st.session_state.rollover_inputs = {
+                    "story_points": story_points,
+                    "priority": priority,
+                    "affected_components": affected_components,
+                    "is_mid_sprint": is_mid_sprint,
+                    "days_into_sprint": next_sprint_days_into,  # now 0
+                    "sprint_duration": next_sprint_duration,
+                    "current_work_story_points": current_work_story_points,
+                    "current_work_priority": current_work_priority
+                }
+                
+            #st.rerun()
+
+            if result.get("used_ml", False):
+                st.info("🤖 Prediction based on trained LightGBM models.")
+            else:
+                st.warning("⚠️ Using fallback heuristic rules (ML models not available).")
+
+            st.subheader("📊 Next Sprint Impact Assessment")
+            c1, c2, c3, c4 = st.columns(4)
+
+            with c1:
+                st.metric("📊 Spillover Risk Next Sprint", f"{rollover_result['spillover_prob']:.0%}")
+            with c2:
+                st.metric("⏱️ Expected Delay Next Sprint", f"{rollover_result['delay_days']:.1f} days")
+            with c3:
+                st.metric("📅 Next Sprint Fit", "✅ Yes" if rollover_result['sprint_fit'] else "❌ No")
+            with c4:
+                st.metric("⚠️ Next Sprint Risk Level", rollover_result['risk'])
+
+            st.markdown("<br>", unsafe_allow_html=True)
+
         else:
-            st.warning("⚠️ Using fallback heuristic rules (ML models not available).")
+            if result.get("used_ml", False):
+                st.info("🤖 Prediction based on trained LightGBM models.")
+            else:
+                st.warning("⚠️ Using fallback heuristic rules (ML models not available).")
 
-        st.subheader("📊 Impact Assessment")
-        c1, c2, c3, c4 = st.columns(4)
+            st.subheader("📊 Impact Assessment")
+            c1, c2, c3, c4 = st.columns(4)
 
-        with c1:
-            st.metric("📊 Spillover Risk", f"{result['spillover_prob']:.0%}")
-        with c2:
-            st.metric("⏱️ Expected Delay", f"{result['delay_days']:.1f} days")
-        with c3:
-            st.metric("📅 Sprint Fit", "✅ Yes" if result['sprint_fit'] else "❌ No")
-        with c4:
-            st.metric("⚠️ Risk Level", result['risk'])
+            with c1:
+                st.metric("📊 Spillover Risk", f"{result['spillover_prob']:.0%}")
+            with c2:
+                st.metric("⏱️ Expected Delay", f"{result['delay_days']:.1f} days")
+            with c3:
+                st.metric("📅 Sprint Fit", "✅ Yes" if result['sprint_fit'] else "❌ No")
+            with c4:
+                st.metric("⚠️ Risk Level", result['risk'])
 
-        st.markdown("<br>", unsafe_allow_html=True)
+            st.markdown("<br>", unsafe_allow_html=True)
 
 
         # ------------------------------------------------------------
@@ -1186,26 +1233,46 @@ with tab1:
             with st.container():
                 st.markdown('<div class="section-card">', unsafe_allow_html=True)
                 st.subheader("🎯 Spillover Risk Gauge")
-                gauge_fig = go.Figure(go.Indicator(
-                    mode="gauge+number",
-                    value=result['spillover_prob']*100,
-                    title={'text': "Risk %"},
-                    gauge={
-                        'axis': {'range': [0, 100]},
-                        'bar': {'thickness': 0.3},
-                        'steps': [
-                            {'range': [0, 35], 'color': "#00c853"},
-                            {'range': [35, 65], 'color': "#fbc02d"},
-                            {'range': [65, 100], 'color': "#ff5252"},
-                        ]
-                    }
-                    ))
-                gauge_fig.update_layout(height=350)
-                st.plotly_chart(gauge_fig, use_container_width=True)
-                st.markdown('</div>', unsafe_allow_html=True)
+                
 
-                                # Release timeline (from cadence)
-            
+                fig1 = go.Figure(go.Indicator(
+                    mode="gauge+number",
+                    value=result['spillover_prob'] * 100,
+                    title={'text': "Current Sprint Risk %"},
+                    domain={'x': [0, 1], 'y': [0, 1]},
+                    gauge={
+                            'axis': {'range': [0, 100]},
+                            'bar': {'thickness': 0.3},
+                            'steps': [
+                            {'range': [0, 35], 'color': "#00c853"},
+                            {'range': [35, 75], 'color': "#fbc02d"},
+                            {'range': [75, 100], 'color': "#ff5252"},]
+                    }
+                ))
+                fig1.update_layout(height=220, margin=dict(l=10, r=10, t=45, b=10))
+                st.plotly_chart(fig1, use_container_width=True)
+
+                if result["delay_days"] > days_left and days_left >= 0:
+                    fig2 = go.Figure(go.Indicator(
+                        mode="gauge+number",
+                        value=rollover_result['spillover_prob'] * 100,
+                        title={'text': "Next Sprint Risk %"},
+                        domain={'x': [0, 1], 'y': [0, 1]},
+                        gauge={
+                            'axis': {'range': [0, 100]},
+                            'bar': {'thickness': 0.3},
+                            'steps': [
+                            {'range': [0, 35], 'color': "#00c853"},
+                            {'range': [35, 75], 'color': "#fbc02d"},
+                            {'range': [75, 100], 'color': "#ff5252"},]
+                        }
+                    ))
+                    fig2.update_layout(height=220, margin=dict(l=10, r=10, t=45, b=10))
+                    st.plotly_chart(fig2, use_container_width=True)
+
+                else:
+                    st.info("The predicted delay can be adjusted in next sprint, so no next sprint recalculation is needed.")
+                st.markdown('</div>', unsafe_allow_html=True)
 
         with right_col:
         # Capacity gauge
