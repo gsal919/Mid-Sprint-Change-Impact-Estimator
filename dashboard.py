@@ -1151,7 +1151,7 @@ with tab1:
 
         days_left = (sprint_duration - days_into_sprint) + sprint_duration  # time left in current sprint + next sprint (assuming spillover goes to next sprint)
         if result["delay_days"] > days_left and days_left >= 0:
-            st.info(f"The model predicts a delay of {result['delay_days']:.1f} days, which exceeds the remaining time in this sprint ({sprint_duration - days_into_sprint} days) hence re-evaluating for next sprint).")
+            st.info(f"The model predicts a delay of {result['delay_days']:.1f} days, which exceeds the remaining time in this sprint ({sprint_duration - days_into_sprint} days) hence re-evaluating for next sprint.")
             
                 # Reset parameters for next sprint
             next_sprint_days_into = 0
