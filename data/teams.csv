@@ -1,9 +1,0 @@
-team_id,name,location,headcount,hours_per_week,type,skills,Ios,Android,Platform,Manual,Auto,Perf,Delivery,BA,SM,Archi,
-1,Amazon,NZ,6.00,240,Scrum,"AndroidDev, PlatformDev, ManualQA, AutomationQA, BA, Architect",,1,1,1,1,,,1,,1,6
-2,Nile,NZ,7.00,280,Scrum,"iOSDev, AndroidDev, PlatformDev, ManualQA, AutomationQA, Delivery, BA",1,1,1,1,1,,1,1,,,7
-3,Yangtze,NZ,8.00,320,Scrum,"AndroidDev, PlatformDev, ManualQA, AutomationQA, PerformanceQA, BA, SM, Architect",,1,1,1,1,1,,1,1,1,8
-4,Yenisei,NZ,9.00,360,Scrum,"iOSDev, AndroidDev, PlatformDev, ManualQA, AutomationQA, PerformanceQA, Delivery, SM, Architect",1,1,1,1,1,1,1,,1,1,9
-5,Mississippi,NZ,10.00,400,Scrum,"iOSDev, AndroidDev, PlatformDev, ManualQA, AutomationQA, PerformanceQA, Delivery, BA, SM, Architect",1,1,1,1,1,1,1,1,1,1,10
-6,Waikato,Overseas,3.00,120,Scrum,"PlatformDev, AutomationQA, SM",,,1,,1,,,,1,,3
-7,Ganga,Overseas,5.00,200,Scrum,"iOSDev, PlatformDev,AutomationQA,  Delivery, BA",1,,1,,1,,1,1,,,5
-8,Congo,Overseas,4.00,160,Scrum,"AndroidDev, ManualQA, PerformanceQA, Architect",,1,,1,,1,,,,1,
