@@ -6,3 +6,6 @@ joblib
 lightgbm
 scikit-learn
 groq
+matplotlib
+shap
+Pillow
