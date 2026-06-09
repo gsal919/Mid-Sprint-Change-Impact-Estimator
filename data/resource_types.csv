@@ -1,0 +1,11 @@
+role,skill,count,skilltype
+Software Developer,iOSDev,4,iOS
+Software Developer,AndroidDev,6,Android
+Software Developer,PlatformDev,7,Platform
+QA,ManualQA,6,Manual
+QA,AutomationQA,7,Automation
+QA,PerformanceQA,4,Performance
+Project / Delivery Manager,Delivery,4,Management
+BA,BA,5,Analysis
+Scrum Master,SM,4,Agile
+Architect,Architect,5,Architecture
