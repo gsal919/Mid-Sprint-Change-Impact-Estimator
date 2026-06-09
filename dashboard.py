@@ -11,6 +11,11 @@ import os
 import ast
 from datetime import date
 from groq import Groq
+import shap
+import matplotlib.pyplot as plt
+import io
+from PIL import Image
+
 
 # ============================================================================
 # PAGE CONFIGURATION (MUST BE FIRST)
@@ -425,6 +430,19 @@ def load_skill_capacity():
         skill_cap[skill] = skill_cap[skill] * 40
     return skill_cap
 
+@st.cache_resource
+def load_shap_explainer():
+    """Create SHAP explainers for both classifier and regressor."""
+    explainer_clf = None
+    explainer_reg = None
+    if ml_models and "spillover" in ml_models:
+        explainer_clf = shap.TreeExplainer(ml_models["spillover"])
+    if ml_models and "regression" in ml_models:
+        explainer_reg = shap.TreeExplainer(ml_models["regression"])
+    return explainer_clf, explainer_reg
+
+shap_explainer_clf, shap_explainer_reg = load_shap_explainer()
+
 # ============================================================================
 # FEATURE ENGINEERING – EXACT MATCH TO TRAINING (13 features)
 # ============================================================================
@@ -548,6 +566,7 @@ def predict_impact_ml(story_points, days_into_sprint, sprint_duration, priority,
             spillover_prob = 0.1 + 0.8*(spillover_prob ** 2)
             delay_days = ml_models["regression"].predict(X)[0]
             used_ml = True
+            st.session_state.last_X = X  # Store for SHAP explanations
         except Exception as e:
             st.warning(f"ML prediction failed ({e}). Using heuristic.")
             spillover_prob, delay_days = heuristic()
@@ -649,28 +668,54 @@ def init_groq():
 def get_dashboard_context():
     """Build a concise context for the AI assistant."""
     context = ""
+    
     # Latest prediction (if available)
-    if "result" in st.session_state:
+    if "result" in st.session_state and st.session_state.result:
         r = st.session_state.result
         context += f"Latest prediction: Spillover risk = {r['spillover_prob']:.0%}, Delay = {r['delay_days']:.1f} days, Recommendation = {r['recommendation']}.\n"
+    
     # Active releases and stages
     if "active_releases" in st.session_state:
         context += f"Active releases: {', '.join(st.session_state.active_releases)}.\n"
     if "total_active_stages" in st.session_state:
         context += f"Total active stages: {st.session_state.total_active_stages}.\n"
 
+    # SHAP classifier features (if available)
+    if "top_shap_features" in st.session_state and st.session_state.top_shap_features:
+        context += "Top factors influencing this prediction:\n"
+        for name, val in st.session_state.top_shap_features:
+            direction = "increased" if val > 0 else "decreased"
+            context += f"- {name}: {direction} risk by {abs(val):.3f}\n"
+
+    # SHAP regressor features - only if last_X exists
+    if "last_X" in st.session_state and st.session_state.last_X is not None:
+        X_input = st.session_state.last_X
+        if "shap_values_reg" in st.session_state and st.session_state.shap_values_reg is not None:
+            contributions_reg = st.session_state.shap_values_reg
+            abs_contrib = np.abs(contributions_reg)
+            top_idx = np.argsort(abs_contrib)[-5:]
+            top_features_reg = [(X_input.columns[i], contributions_reg[i]) for i in top_idx]
+            context += "Top factors influencing expected delay:\n"
+            for name, val in top_features_reg:
+                direction = "increased" if val > 0 else "decreased"
+                context += f"- {name}: {direction} delay by {abs(val):.2f} days\n"
+
+    # Current inputs (if any)
     if "current_inputs" in st.session_state:
         inp = st.session_state.current_inputs
-        context += f"Current change: {inp['story_points']} story points, priority={inp['priority']}, affected components={inp['affected_components']}, mid‑sprint={inp['is_mid_sprint']}, days into sprint={inp['days_into_sprint']}, sprint duration={inp['sprint_duration']}.\n"
+        context += f"Current change: {inp.get('story_points', '?')} story points, priority={inp.get('priority', '?')}, affected components={inp.get('affected_components', '?')}, mid‑sprint={inp.get('is_mid_sprint', '?')}, days into sprint={inp.get('days_into_sprint', '?')}, sprint duration={inp.get('sprint_duration', '?')}.\n"
+    
     # Historical statistics
     stats = get_historical_stats()
     if stats:
         context += f"Historical data (based on {stats['total_changes']} changes): average delay = {stats['avg_delay']:.1f} days, spillover rate = {stats['spillover_rate']:.1%}, average story points = {stats['avg_story_points']:.1f}.\n"
         if stats.get("recent_avg_delay"):
             context += f"Last 30 days average delay: {stats['recent_avg_delay']:.1f} days.\n"
-    # Add current date and selected release (if any)
+    
+    # Target release
     if "target_release" in st.session_state:
         context += f"Target release for this change: {st.session_state.target_release}.\n"
+    
     context += "You are an expert assistant for a software delivery impact estimator. Answer questions concisely and helpfully based on the provided context."
     return context
 
@@ -709,7 +754,7 @@ Please answer concisely and helpfully, using the context above if relevant.
 
 st.sidebar.title("⚙️ Change Request Control Center")
 
-st.sidebar.markdown("---")
+#st.sidebar.markdown("---")
 
 # ----------------------------------------------------------------
 # WORK ITEM HIERARCHY SUGGESTION WITH AI ASSISTANT
@@ -739,7 +784,7 @@ if data is not None:
         return " -> ".join(reversed(path))
 
     
-    st.sidebar.markdown("---")
+    #st.sidebar.markdown("---")
     st.sidebar.subheader("🤖 AI Work Item Suggestion")
 
     change_desc = st.sidebar.text_area("Describe the change", placeholder="e.g., Add biometric authentication for iOS users", height=80, key="ai_desc_2")
@@ -812,7 +857,7 @@ if data is not None:
 else:
     work_items_df = None
 
-
+st.sidebar.info("💡 **Tip:** AI suggested story points may be off. Use the slider to match your actual change request size.")
 # After loading hierarchy options, set default index
 if data is not None:
     hierarchy = get_hierarchy_options(data)
@@ -860,7 +905,7 @@ if data is not None:
                         #story_points = us_row.iloc[0]["story_points"]
                         #st.sidebar.info(f"📊 **Story Points:** {story_points}")
                         default_story_points = int(us_row.iloc[0]["story_points"])
-                        story_points = st.sidebar.slider("📊 Story Points", min_value=1, max_value=21, value=default_story_points, step=1)
+                        story_points = st.sidebar.slider("📊 Story Points", min_value=1, max_value=21, value=default_story_points, step=1, help= "Story points measure relative effort. 1–3 = small, 5–8 = medium, 13–21 = large.")
                         st.sidebar.write(f"Selected Story Points: {story_points}")
                     else:
                         story_points = st.number_input("Story Points", min_value=1, max_value=21, value=3, step=1)
@@ -885,7 +930,7 @@ else:
 
 st.sidebar.subheader("🚨 Change Impact")
 
-priority = st.sidebar.select_slider("**Priority**", options=["Low", "Medium", "High", "Critical"], value="Medium")
+priority = st.sidebar.select_slider("**Priority**", options=["Low", "Medium", "High", "Critical"], value="Medium", help="Critical changes have the highest multiplier (1.2). Low priority changes (0.3) rarely cause spillover.")
 
 st.sidebar.subheader("🔧 Affected Components")
 component_options = ["iOSDev", "AndroidDev", "PlatformDev", "ManualQA", "AutomationQA", "PerformanceQA", "Delivery", "BA", "SM", "Architect"]
@@ -907,13 +952,13 @@ st.sidebar.subheader("📅 Sprint Context")
 
 
 
-
 cadence_df = load_release_cadence()
 
 current_date = st.sidebar.date_input("Current Date", date.today())
 
 
 sprint_name, sprint_duration, days_into_sprint = get_current_sprint_from_cadence(cadence_df, pd.to_datetime(current_date))
+
 
 if days_into_sprint is None:
     days_into_sprint = 0   
@@ -935,6 +980,7 @@ test_date = pd.to_datetime("2026-05-15")
 mask = (cadence_df["week_start"] <= test_date) & (test_date <= cadence_df["week_end"])
 rows_in_week = cadence_df.loc[mask]
 
+
 # Initialize target_release to None
 target_release = None
 active_releases = get_active_releases(cadence_df, pd.to_datetime(current_date))
@@ -943,6 +989,7 @@ if active_releases:
     target_release = st.sidebar.selectbox("Select the release for this change request", active_releases)
 else:
     st.warning("No active releases found for the selected date. Please adjust the date.")
+
  
 original_cadence = load_release_cadence()
 current_date_ts = pd.to_datetime(current_date)
@@ -1034,6 +1081,7 @@ else:
 
         # ================================================================
 
+
 st.sidebar.subheader("🔄 Current Active Work")
 
 current_work_story_points = st.sidebar.slider("**Current Work Story Points**", min_value=0, max_value=13, value=3)
@@ -1054,12 +1102,13 @@ estimate_btn = st.sidebar.button("🚀 Run Impact Analysis", type="primary", use
 # HEADER
 # ============================================================================
 
-st.title("🏦 Fiserv - Mid-Sprint Change Impact Estimator Platform")
+st.title("🏦 Fiserv Delivery Intelligence Suite")
 
-st.info("""AI-powered delivery impact estimation for client scope changes""")
+st.subheader("""Impact, Planning & Analytics for Agile Project Delivery.""")
+st.info(""" AI-powered delivery impact estimation for client scope changes. Use inputs on the left to fill in the change request details (story points, priority, affected components) and the sprint context.The model will predict **spillover risk** and **expected delay**.""")
 
-tab1, tab2, tab3, tab4 = st.tabs([
-    "📊 Impact Estimator", "📋 Work Item Hierarchy", "🏢 Release Structure", "📈 Data Overview"
+tab1, tab2, tab3, tab4, tab5 = st.tabs([
+    "📊 Impact Estimator", "🔍 Result Explanations", "🏗️ Planning View", "📈 Data Overview" , "🔮 What‑If Simulation"
 ])
 
 # ===== TAB 1: IMPACT ESTIMATOR =====
@@ -1075,7 +1124,7 @@ with tab1:
 
 
     with k2:
-        st.metric("💪 Team Capacity", f"{team_capacity} hrs/sprint")
+        st.metric("💪 Team Capacity", f"{team_capacity} hrs/sprint", help= "Total sprint capacity (hours) × (1 − sprint % complete)")
     with k3:
         #st.metric("👥 Remaining Capacity", f"{remaining_capacity:.0f} hrs or " f"{remaining_capacity/team_capacity:.0%} ")
         st.metric("👥 Available Capacity", f"{availablecapacity:.0f} hrs or " f"{availablecapacity/team_capacity:.0%} ")
@@ -1104,11 +1153,19 @@ with tab1:
                                     utilisation_factor=utilisation_factor,
                                     available_capacity_ratio=available_capacity_ratio, item_type="User Story")
 
+        #completion_pct = (days_into_sprint / sprint_duration if sprint_duration > 0 else 0)
 
+        # Rollover correction for end‑of‑sprint scenarios
+
+        
+                
+                #st.rerun()
 
         # If we reach here, no rollover needed → store original results
+        #completion_pct = min(completion_pct, 1.0)
         completion_pct = min(days_into_sprint / sprint_duration, 1.0)
         
+
         remaining_current_work = (current_work_story_points* (1 - completion_pct))
 
         incoming_priority_value = (priority_mult.get(priority, 1.0))
@@ -1152,7 +1209,6 @@ with tab1:
         days_left = (sprint_duration - days_into_sprint) + sprint_duration  # time left in current sprint + next sprint (assuming spillover goes to next sprint)
         if result["delay_days"] > days_left and days_left >= 0:
             st.info(f"The model predicts a delay of {result['delay_days']:.1f} days, which exceeds the remaining time in this sprint ({sprint_duration - days_into_sprint} days) hence re-evaluating for next sprint.")
-            
                 # Reset parameters for next sprint
             next_sprint_days_into = 0
             next_sprint_duration = 10
@@ -1181,7 +1237,6 @@ with tab1:
                     "current_work_priority": current_work_priority
                 }
                 
-            #st.rerun()
 
             if result.get("used_ml", False):
                 st.info("🤖 Prediction based on trained LightGBM models.")
@@ -1232,7 +1287,7 @@ with tab1:
         # Risk gauge
             with st.container():
                 st.markdown('<div class="section-card">', unsafe_allow_html=True)
-                st.subheader("🎯 Spillover Risk Gauge")
+                st.subheader("🎯 Spillover Risk Gauge", help= "The gauge shows the probability that the change will **spill over** into the next sprint. Above 75% = high risk.")
                 
 
                 fig1 = go.Figure(go.Indicator(
@@ -1363,173 +1418,517 @@ with tab1:
             with st.chat_message("assistant"):
                 st.markdown(answer)
             #st.rerun()
-
-
-# ---------------------------
-# 2. Display results from session state (if available)
-# ---------------------------
     
 
 
+# ============================================================================
+# TAB 2: Model Result Explanations (SHAP)
+# ============================================================================
 
-# ============================================================================
-# TAB 2: WORK ITEM HIERARCHY
-# ============================================================================
 with tab2:
-    st.subheader("📋 Fiserv Work Item Hierarchy")
-    st.markdown("The following hierarchy matches Fiserv's exact work breakdown structure:")
-    st.code("""
-Epic (e.g., Accounts, Payments, Security)
-│
-└── Feature (e.g., Cards, User Registration)
-    │
-    ├── Business Story (e.g., Add Card, Remove Card)
-    │   │
-    │   ├── User Story (e.g., Display Card Menu)
-    │   │   ├── Back end development task
-    │   │   ├── iOS development task
-    │   │   ├── Android development task
-    │   │   └── QA task
-    │   │
-    │   └── User Story (e.g., Make a transfer)
-    │
-    └── Business Story (e.g., Update Card)
-    """, language="text")
+    st.subheader("🔍 Model Result Explanations (SHAP)")
+
+    st.info("""After running a prediction, SHAP explains *why* the model made that decision.  
+    - **Global feature importance** shows the most influential factors across all predictions.  
+    - **Waterfall plots** break down the current change request – each bar shows how a feature pushed the prediction up or down.
+    """)
     
-    if data is not None:
-        df = data["work_items"]
-        st.subheader("📊 Hierarchy Statistics")
-        col1, col2, col3, col4, col5 = st.columns(5)
-        with col1:
-            st.metric("Epics", len(df[df["level"] == "Epic"]))
-        with col2:
-            st.metric("Features", len(df[df["level"] == "Feature"]))
-        with col3:
-            st.metric("Business Stories", len(df[df["level"] == "Business Story"]))
-        with col4:
-            st.metric("User Stories", len(df[df["level"] == "User Story"]))
-        with col5:
-            st.metric("Tasks", len(df[df["level"] == "Task"]))
-        
-        st.subheader("📋 Sample Hierarchy")
-        sample_epic = df[df["level"] == "Epic"].iloc[0] if len(df[df["level"] == "Epic"]) > 0 else None
-        if sample_epic is not None:
-            epic_id = sample_epic["work_item_id"]
-            epic_name = sample_epic["name"]
-            tree = f"📌 **Epic:** {epic_name}\n"
-            features = df[(df["level"] == "Feature") & (df["parent_id"] == epic_id)]
-            for _, feature in features.iterrows():
-                tree += f"  └── 📌 **Feature:** {feature['name']}\n"
-                business_stories = df[(df["level"] == "Business Story") & (df["parent_id"] == feature["work_item_id"])]
-                for _, bs in business_stories.iterrows():
-                    tree += f"      └── 📌 **Business Story:** {bs['name']}\n"
-                    user_stories = df[(df["level"] == "User Story") & (df["parent_id"] == bs["work_item_id"])]
-                    for _, us in user_stories.iterrows():
-                        tree += f"          └── 📌 **User Story:** {us['name']}\n"
-                        tasks = df[(df["level"] == "Task") & (df["parent_id"] == us["work_item_id"])]
-                        for _, task in tasks.iterrows():
-                            tree += f"              └── 📌 **Task:** {task['name']} ({task['story_points']} SP)\n"
-            st.markdown(tree)
-        else:
-            st.info("Run the data generator first to see the work item hierarchy.")
+    # ---- Classifier explainer check ----
+    if shap_explainer_clf is None:
+        st.info("SHAP explainer for spillover not available.")
     else:
-        st.info("Data not loaded. Run the data generator first.")
+        # Global Feature Importance (precomputed image)
+        st.markdown("#### Global Feature Importance: Spillover Risk")
+        try:
+            st.image("models/shap_global_bar_classifier_spillover_lgb.png",
+                     caption="Top Features Driving Spillover Predictions",
+                     use_container_width=True)
+        except Exception as e:
+            st.warning(f"Could not load precomputed SHAP chart: {e}")
+
+        st.divider()
+        
+        # ---- Local explanations for current prediction ----
+        if "last_X" in st.session_state and st.session_state.last_X is not None:
+            X_input = st.session_state.last_X
+            st.markdown("#### Explanation for the Current Change Request")
+            
+            with st.spinner("Computing SHAP values..."):
+                # ---------- Classifier (Spillover) ----------
+                shap_values_clf = shap_explainer_clf.shap_values(X_input)
+                if isinstance(shap_values_clf, list):
+                    shap_values_class = shap_values_clf[1]       # class 1 (spillover)
+                else:
+                    shap_values_class = shap_values_clf
+                expected_value_clf = shap_explainer_clf.expected_value
+                if isinstance(expected_value_clf, list):
+                    expected_value_clf = expected_value_clf[1]
+                
+                # ---------- Regressor (Delay Days) ----------
+                if shap_explainer_reg is not None:
+                    shap_values_reg = shap_explainer_reg.shap_values(X_input)   # shape (1, n_features)
+                    st.session_state.shap_values_reg = shap_values_reg[0]       # 1D array
+                    #st.session_state.expected_value_reg = shap_explainer_reg.expected_value
+                    st.session_state.expected_value_reg = float(np.squeeze(shap_explainer_reg.expected_value))
+            
+            # ---------- Waterfall for Classifier ----------
+            st.markdown("##### Waterfall Plot (Spillover Risk)")
+            fig_wf_clf = plt.figure(figsize=(10, 6))
+            shap.waterfall_plot(
+                shap.Explanation(values=shap_values_class[0],
+                                 base_values=expected_value_clf,
+                                 data=X_input.iloc[0].values,
+                                 feature_names=X_input.columns.tolist()),
+                show=False
+            )
+            st.pyplot(fig_wf_clf)
+            plt.close(fig_wf_clf)
+            
+            # Store top features for chatbot (classifier)
+            contributions_clf = shap_values_class[0]
+            abs_contrib = np.abs(contributions_clf)
+            top_idx = np.argsort(abs_contrib)[-5:]
+            top_features = [(X_input.columns[i], contributions_clf[i]) for i in top_idx]
+            st.session_state.top_shap_features = top_features
+
+            st.markdown("<hr>", unsafe_allow_html=True)
+
+            st.markdown("#### Global Feature Importance: Expected Delay(days)")
+            try:
+                st.image("models/shap_global_bar_regressor_delay_days.png",
+                     caption="Top Features Driving Delay Predictions",
+                     use_container_width=True)
+            except Exception as e:
+                st.warning(f"Could not load precomputed SHAP chart: {e}")
+
+            st.markdown("""<hr style="height:2px;border:none;color:#333;background-color:#333;" />""",unsafe_allow_html=True)
+
+            # ---------- Waterfall for Regressor (if available) ----------
+            if shap_explainer_reg is not None and "shap_values_reg" in st.session_state:
+                st.markdown("#### Explanation for Expected Delay (days)")
+                st.markdown("##### Waterfall Plot (Delay Days)")
+                fig_wf_reg = plt.figure(figsize=(10, 6))
+                #base_value = float(np.squeeze(st.session_state.expected_value_reg))
+                shap.waterfall_plot(
+                    shap.Explanation(values=st.session_state.shap_values_reg,
+                                     base_values=st.session_state.expected_value_reg,
+                                     data=X_input.iloc[0].values,
+                                     feature_names=X_input.columns.tolist()),
+                    show=False
+                )
+                st.pyplot(fig_wf_reg)
+                plt.close(fig_wf_reg)
+            else:
+                st.info("SHAP explainer for delay days not available.")
+        else:
+            st.info("Run an impact estimate first to see explanations for that change.")
 
 # ============================================================================
-# TAB 3: RELEASE STRUCTURE (CORRECTED INDENTATION)
+# TAB 3: Unified Planning View
 # ============================================================================
 with tab3:
-    st.subheader("🏢 Fiserv Release Structure")
-    st.markdown("Fiserv manages **3 parallel releases** with **8 overlapping stages**:")
-    
-    if data is not None:
-        releases_df = data["releases"]
-        stages = [
-            "Requirement/Discovery",
-            "Tech Solution & Kick Off",
-            "Design",
-            "Develop",
-            "SIT",
-            "CAT/UAT",
-            "System Implement",
-            "App Launch"
-        ]
-        stage_durations = [4, 4, 6, 8, 8, 6, 1, 0.2]
-        stages_df = pd.DataFrame({
-            "Stage": stages,
-            "Duration (weeks)": stage_durations,
-            "Parties Involved": ["Client"] + ["Fiserv & Client"] * 6 + ["Client"]
-        })
-        st.dataframe(stages_df, use_container_width=True)
+    st.subheader("🏗️ Unified Planning View – Release Timeline & Work Breakdown")
+    st.info("""The Gantt chart shows all parallel releases (Rel.X+2 … X+10) with their stages over time.  
+    Orange dashed lines mark sprint boundaries (with sprint numbers).  
+    Below, expand the **Work Item Hierarchy** to see the breakdown of Epics → Features → User Stories → Tasks.
+    """)
+
+    # ------------------------------------------------------------
+    # Load and prepare release cadence data for Gantt
+    # ------------------------------------------------------------
+    @st.cache_data
+    def load_cadence_for_gantt(csv_path="data/release_cadence.csv"):
+        df = pd.read_csv(csv_path)
+        # Convert date columns
+        df["week_start"] = pd.to_datetime(df["week_start"], format="%d/%m/%y", errors="coerce")
+        df["week_end"]   = pd.to_datetime(df["week_end"],   format="%d/%m/%y", errors="coerce")
+        df["sprint_start"] = pd.to_datetime(df["sprint_start"], format="%d/%m/%y", errors="coerce")
+        df["sprint_end"]   = pd.to_datetime(df["sprint_end"],   format="%d/%m/%y", errors="coerce")
+        df = df.dropna(subset=["week_start", "week_end"])
         
-        st.subheader("📅 Release Timeline (Parallel Releases)")
-        for _, release in releases_df.iterrows():
-            st.markdown(f"**{release['release_name']}** (Start: {release['start_date'][:10]})")
-            stages_str = release.get('stages', '[]')
-            stages_list = safe_parse_stages(stages_str)
-            if stages_list:
-                timeline = ""
-                for i, stage in enumerate(stages_list[:8]):
-                    name = stage.get('stage_name', 'Unknown')
-                    weeks = stage.get('duration_weeks', 4)
-                    bar = "█" * int(weeks) if weeks > 0 else "·"
-                    timeline += f"  {name[:15]}: {bar} ({weeks} wks)\n"
-                st.text(timeline)
-            else:
-                st.caption("(Stage details not available)")
-        st.info("""
-        **Key Factors Impacting Release Cadence:**
-        - Mandates from BoT that cannot be ignored
-        - Fiserv dependencies on client and 3rd party vendors
-        - Parallel release management (3 releases simultaneously)
-        """)
+        # Extract unique sprint boundaries (start and end)
+        sprint_start_map = {}   # date -> sprint_number
+        sprint_boundaries = set()
+        for _, row in df.iterrows():
+            if pd.notna(row["sprint_start"]) and pd.notna(row["sprint_number"]):
+                sprint_start_map[row["sprint_start"]] = row["sprint_number"]
+                sprint_boundaries.add(row["sprint_start"])
+            #if pd.notna(row["sprint_end"]):
+                #sprint_boundaries.add(row["sprint_end"])
+        sprint_boundaries = sorted(sprint_boundaries)
+        
+        # Identify release columns
+        release_cols = [col for col in df.columns if col.startswith("Rel.")]
+        # Melt to long format
+        long_rows = []
+        for _, row in df.iterrows():
+            for rel in release_cols:
+                stage_str = row[rel]
+                if pd.isna(stage_str) or stage_str == "":
+                    continue
+                long_rows.append({
+                    "Release": rel,
+                    "Stage": stage_str,
+                    "Start": row["week_start"],
+                    "End": row["week_end"]
+                })
+        gantt_df = pd.DataFrame(long_rows)
+        gantt_df = gantt_df.sort_values("Start")
+        return gantt_df, sprint_boundaries, sprint_start_map
+
+    cadence_gantt, sprint_boundaries, sprint_start_map  = load_cadence_for_gantt()
+
+    if not cadence_gantt.empty:
+        # Date range filter
+        min_date = cadence_gantt["Start"].min().date()
+        max_date = cadence_gantt["End"].max().date()
+        date_range = st.slider(
+            "Zoom timeline (select date range)",
+            min_value=min_date,
+            max_value=max_date,
+            value=(min_date, max_date),
+            format="YYYY-MM-DD"
+        )
+        start_filter, end_filter = pd.to_datetime(date_range[0]), pd.to_datetime(date_range[1])
+        filtered_df = cadence_gantt[(cadence_gantt["Start"] <= end_filter) & (cadence_gantt["End"] >= start_filter)]
+
+        # Build Gantt chart
+        fig = px.timeline(
+            filtered_df,
+            x_start="Start",
+            x_end="End",
+            y="Release",
+            color="Stage",
+            title="Release Cadence with Parallel Stages & Sprint Boundaries",
+            labels={"Release": "Release", "Stage": "Stage"},
+            height=600
+        )
+        fig.update_yaxes(autorange="reversed")
+        fig.update_layout(
+            xaxis_title="Date",
+            yaxis_title="Release",
+            legend_title="Stage",
+            hovermode="closest",
+            plot_bgcolor="white"
+        )
+        fig.update_traces(marker_line_width=0.5, marker_line_color="gray")
+
+        # Add vertical lines for sprint boundaries (only those within filtered date range)
+        for sprint_date in sprint_boundaries:
+            if start_filter <= sprint_date <= end_filter:
+                fig.add_vline(
+                    x=sprint_date.to_pydatetime(),
+                    line_dash="dash",
+                    line_color="orange",
+                    line_width=1
+                    #annotation_text=f"Sprint {sprint_no}",
+                    #annotation_position="top"
+                )
+                # Add sprint number label (only for sprint start dates)
+                if sprint_date in sprint_start_map:
+                    sprint_num = sprint_start_map[sprint_date]
+                    fig.add_annotation(
+                        x=sprint_date.to_pydatetime(),
+                        y=1.06,          # near top of the plotting area
+                        xref="x",
+                        yref="paper",
+                        text=sprint_num,
+                        showarrow=False,
+                        font=dict(size=9, color="black"),
+                        textangle=-90,   # rotate to save horizontal space
+                        yshift=5
+                    )
+        st.plotly_chart(fig, use_container_width=True)
+        st.caption("Each coloured bar represents release stages. Orange dashed lines mark sprint boundaries. Hover over bars for exact dates.")
     else:
-        st.info("Run the data generator first to see the release structure.")
+        st.warning("No release cadence data available. Please check the CSV file.")
+
+    # ------------------------------------------------------------
+    # Work Item Hierarchy (collapsible)
+    # ------------------------------------------------------------
+    st.divider()
+    #st.markdown("---")
+    with st.expander("📂 Work Item Hierarchy (click to expand)", expanded=False):
+        if data is not None and "work_items" in data:
+            df = data["work_items"]
+            st.markdown(f"📌 {len(df[df['level'] == 'Epic'])} Epics · "
+                       f"🔹 {len(df[df['level'] == 'Feature'])} Features · "
+                       f"📘 {len(df[df['level'] == 'Business Story'])} Business Stories · "
+                       f"📄 {len(df[df['level'] == 'User Story'])} User Stories · "
+                       f"⚙️ {len(df[df['level'] == 'Task'])} Tasks")
+
+            epics = df[df["level"] == "Epic"]
+            for _, epic in epics.iterrows():
+                with st.expander(f"📌 **Epic:** {epic['name']} (SP {epic['story_points']})"):
+                    features = df[(df["level"] == "Feature") & (df["parent_id"] == epic["work_item_id"])]
+                    for _, feat in features.iterrows():
+                        st.markdown(f"    🔹 **Feature:** {feat['name']} (SP {feat['story_points']})")
+                        bss = df[(df["level"] == "Business Story") & (df["parent_id"] == feat["work_item_id"])]
+                        for _, bs in bss.iterrows():
+                            st.markdown(f"        📘 **Business Story:** {bs['name']} (SP {bs['story_points']})")
+                            uss = df[(df["level"] == "User Story") & (df["parent_id"] == bs["work_item_id"])]
+                            for _, us in uss.iterrows():
+                                st.markdown(f"            📄 **User Story:** {us['name']} (SP {us['story_points']})")
+                                tasks = df[(df["level"] == "Task") & (df["parent_id"] == us["work_item_id"])]
+                                for i, task in enumerate(tasks.iterrows()):
+                                    if i >= 3:
+                                        st.markdown("                ⚙️ ... and more tasks")
+                                        break
+                                    task = task[1]
+                                    st.markdown(f"                ⚙️ Task: {task['name']} (SP {task['story_points']})")
+        else:
+            st.info("Work item data not loaded.")
 
 # ============================================================================
 # TAB 4: DATA OVERVIEW
 # ============================================================================
 with tab4:
-    st.subheader("📈 Data Overview")
+    st.subheader("📈 Team & Resource Intelligence")
+
     if data is not None:
-        st.subheader("📊 Key Metrics")
-        col1, col2, col3, col4 = st.columns(4)
+        teams_df = data["teams"].copy()
+        # Ensure numeric columns
+        numeric_cols = ["headcount", "hours_per_week"]
+        for col in numeric_cols:
+            teams_df[col] = pd.to_numeric(teams_df[col], errors="coerce")
+        
+        # The skill matrix columns (all except the core team info)
+        # Identify columns that are skill booleans (0/1)
+        skill_cols = [col for col in teams_df.columns if col not in 
+                      ["team_id", "name", "location", "headcount", "hours_per_week", "type", "Total"]]
+        # Keep only those that contain 0/1 values (assume all are skills)
+        
+        # Overall KPIs
+        
+        #st.markdown("---")
+        total_hc = teams_df["headcount"].sum()
+        total_cap = teams_df["hours_per_week"].sum()
+        nz_hc = teams_df[teams_df["location"] == "NZ"]["headcount"].sum()
+        os_hc = teams_df[teams_df["location"] == "Overseas"]["headcount"].sum()
+        col_a, col_b, col_c, col_d = st.columns(4)
+        col_a.metric("👥 Total Headcount", total_hc)
+        col_b.metric("⏱️ Total Weekly Capacity", f"{total_cap} hrs")
+        col_c.metric("🇳🇿 NZ Headcount", nz_hc)
+        col_d.metric("🌏 Overseas Headcount", os_hc)
+
+        st.divider()
+        # ------------------------------------------------------------
+        # Skill Coverage Heatmap
+        # ------------------------------------------------------------
+        st.markdown("#### 🔥 Team Skill Coverage Heatmap")
+        # Prepare pivot: teams as rows, skills as columns
+        heatmap_data = teams_df.set_index("name")[skill_cols]
+        fig_heat = px.imshow(
+            heatmap_data,
+            labels=dict(x="Skill", y="Team", color="Has Skill"),
+            title="Which teams have which skills? (1 = yes, 0 = no)",
+            color_continuous_scale="Blues",
+            aspect="auto"
+        )
+        fig_heat.update_layout(height=400)
+        st.plotly_chart(fig_heat, use_container_width=True)
+        st.caption("Dark blue = team has that skill. White = no coverage. Gaps in critical skills (e.g., PerformanceQA) may cause bottlenecks.")
+
+        st.divider()
+        
+        # ------------------------------------------------------------
+        # Headcount & Capacity Visuals
+        # ------------------------------------------------------------
+        col1, col2 = st.columns([0.5, 0.5])
+        resources_df = data["resource_types"].copy()
+        resources_df["count"] = pd.to_numeric(resources_df["count"], errors="coerce")
+        st.markdown("#### 👥 Teamwise and Rolewise Resource count")
+
         with col1:
-            st.metric("Total Work Items", len(data["work_items"]))
+            
+            fig_hc = px.bar(
+                teams_df,
+                x="name",
+                y="headcount",
+                color="location",
+                title="Headcount per Team",
+                text="headcount"
+            )
+            fig_hc.update_traces(textposition="outside")
+            fig_hc.update_layout(height=400)
+            st.plotly_chart(fig_hc, use_container_width=True)
+
         with col2:
-            st.metric("Total Sprints", len(data["sprints"]))
-        with col3:
-            st.metric("Teams", len(data["teams"]))
-        with col4:
-            st.metric("Change Requests", len(data["change_requests"]))
+            
+            # Horizontal bar chart for better readability
+            fig_res = px.bar(
+                resources_df,
+                y="role",
+                x="count",
+                color="skill",
+                title="Resource Count by Role",
+                labels={"count": "Number of People", "role": ""},
+                orientation="h",
+                text="count"
+            )
+            fig_res.update_traces(textposition="outside")
+            fig_res.update_layout(height=400)
+            st.plotly_chart(fig_res, use_container_width=True)
+
+
+        st.divider()
         
-        st.subheader("🏢 Team Structure")
-        st.dataframe(data["teams"], use_container_width=True)
+        # ------------------------------------------------------------
+        # Utilisation Heatmap (Robust version)
+        # ------------------------------------------------------------
+        if "change_requests" in data and data["change_requests"] is not None:
+            cr_df = data["change_requests"].copy()
+            required = ["team_id", "delay_days_caused", "sprint_name"]
+            if all(col in cr_df.columns for col in required):
+                # Clean data
+                cr_df["delay_days_caused"] = pd.to_numeric(cr_df["delay_days_caused"], errors="coerce")
+                cr_df["sprint_name"] = cr_df["sprint_name"].astype(str).str.strip()
+                #cr_df["team_id"] = pd.to_numeric(cr_df["team_id"], errors="coerce")
+                cr_df["team_id"] = (cr_df["team_id"].astype(str).str.strip())
+                # Drop rows with missing numeric values
+                cr_df = cr_df.dropna(subset=["delay_days_caused"])
+                
+                if not cr_df.empty:
+                    # Aggregate
+                    util_agg = (cr_df.groupby(["team_id", "sprint_name"])["delay_days_caused"].mean().reset_index())
+                    util_agg = util_agg.rename(columns={"team_id": "team_name"})
+                    # Map team_id to team name
+                    #team_name_map = teams_df.set_index("team_id")["name"].to_dict()
+                    #util_agg["team_name"] = util_agg["team_id"].map(team_name_map)
+                    # Drop any rows where team_name is missing (shouldn't happen)
+                    #util_agg = util_agg.dropna(subset=["team_name"])
+                    
+                    if not util_agg.empty:
+                        # Pivot
+                        pivot_util = (cr_df.groupby(["team_id", "sprint_name"])["delay_days_caused"].mean().reset_index().pivot_table(index="team_id",columns="sprint_name",values="delay_days_caused"))
+                        # Optional: sort sprint columns chronologically
+                        try:
+                            # Extract sprint number (e.g., "Sprint 20" -> 20)
+                            def sprint_num(x):
+                                parts = x.split()
+                                return int(parts[-1]) if parts and parts[-1].isdigit() else 0
+                            pivot_util = pivot_util.reindex(
+                                sorted(pivot_util.columns, key=sprint_num),
+                                axis=1
+                            )
+                        except:
+                            pass
+                        
+                        st.markdown("#### 📊 Team Delay Heatmap (by Sprint)")
+                        fig_util = px.imshow(
+                            pivot_util,
+                            labels=dict(x="Sprint", y="Team", color="Avg days delay caused"),
+                            title="Average Team Delay Days per Sprint (darker = more delay)",
+                            color_continuous_scale="plasma_r",
+                            aspect="auto",
+                            zmin=pivot_util.min().min(),
+                            zmax=pivot_util.max().max()
+                        )
+                        fig_util.update_layout(height=400)
+                        st.plotly_chart(fig_util, use_container_width=True)
+                    else:
+                        st.info("No valid team mapping found for delay_days data.")
+                else:
+                    st.info("No rows with valid numeric delay_days or team_id.")
+            else:
+                st.info(f"Missing required columns: {[c for c in required if c not in cr_df.columns]}")
+        else:
+            st.info("Change requests data not loaded.")
+ 
         
-        st.subheader("👥 Resource Types")
-        st.dataframe(data["resource_types"], use_container_width=True)
+
         
-        st.subheader("📦 Release Scope (Release X+2)")
-        st.dataframe(data["release_scope"].head(10), use_container_width=True)
-        
-        st.subheader("🔄 Change Request Statistics")
-        cr_df = data["change_requests"]
-        if len(cr_df) > 0:
-            spillover_rate = cr_df["caused_spillover"].mean() * 100
-            col1, col2 = st.columns(2)
-            with col1:
-                st.metric("Spillover Rate", f"{spillover_rate:.1f}%")
-            with col2:
-                st.metric("Total Change Requests", len(cr_df))
-            if "delay_days_caused" in cr_df.columns:
-                fig = px.histogram(cr_df, x="delay_days_caused", title="Delay Days Distribution",
-                                   labels={"delay_days_caused": "Delay Days"}, nbins=20)
-                st.plotly_chart(fig, use_container_width=True)
     else:
-        st.info("Run the data generator first to see the data overview.")
+        st.info("Data not loaded. Please run the data generator first.")
+
+with tab5:
+
+    st.subheader("🔮 What‑If Simulation")
+    st.markdown("Adjust the parameters below to see how they affect **spillover risk** and **expected delay**. The simulation runs instantly.")
+
+    # Use columns to organise controls
+    col_left, col_right = st.columns(2)
+
+    with col_left:
+        st.markdown("#### Change Request Attributes")
+        sim_story_points = st.slider("Story Points", 1, 21, 5, key="sim_sp")
+        sim_priority = st.select_slider("Priority", options=["Low", "Medium", "High", "Critical"], value="Medium", key="sim_prio")
+        sim_affected_components = st.multiselect(
+            "Affected Components",
+            options=["iOSDev", "AndroidDev", "PlatformDev", "ManualQA", "AutomationQA", "PerformanceQA", "Delivery", "BA", "SM", "Architect"],
+            default=["PlatformDev"],
+            key="sim_comp"
+        )
+        sim_affected_count = len(sim_affected_components) if sim_affected_components else 1
+        st.caption(f"Total components affected: {sim_affected_count}")
+
+        sim_is_mid_sprint = st.checkbox("Is this a mid‑sprint change?", value=True, key="sim_mid")
+        sim_item_type = st.selectbox("Work Item Level", ["User Story", "Task", "Business Story", "Feature", "Epic"], index=0, key="sim_type")
+
+    with col_right:
+        st.markdown("#### Sprint & Team Context")
+        sim_sprint_duration = st.slider("Sprint Duration (days)", 5, 20, 10, key="sim_dur")
+        sim_days_into_sprint = st.slider("Days into Sprint", 0, sim_sprint_duration - 1, 5, key="sim_days")
+        sim_team_capacity = st.number_input("Team Capacity (hours per sprint)", min_value=100, max_value=800, value=400, step=50, key="sim_cap")
+        sim_team_headcount = st.number_input("Team Headcount", min_value=1, max_value=20, value=5, step=1, key="sim_hc")
+        sim_utilisation_factor = st.slider("Team Utilisation Factor", 0.3, 0.95, 0.7, 0.05, key="sim_util")
+        sim_available_capacity_ratio = st.slider("Available Capacity Ratio", 0.0, 1.0, 0.4, 0.05, key="sim_avail")
+
+    # Derive base_remaining_capacity_hours from capacity and utilisation
+    sim_base_remaining = sim_team_capacity * (1 - sim_days_into_sprint / sim_sprint_duration) * (1 - sim_utilisation_factor)
+
+    # Run prediction
+    sim_result = predict_impact_ml(
+        story_points=sim_story_points,
+        days_into_sprint=sim_days_into_sprint,
+        sprint_duration=sim_sprint_duration,
+        priority=sim_priority,
+        affected_components=sim_affected_count,
+        team_capacity=sim_team_capacity,
+        is_mid_sprint=sim_is_mid_sprint,
+        team_headcount=sim_team_headcount,
+        base_remaining_capacity_hours=sim_base_remaining,
+        utilisation_factor=sim_utilisation_factor,
+        available_capacity_ratio=sim_available_capacity_ratio,
+        item_type=sim_item_type
+    )
+
+    # Display results in nice cards
+    st.markdown("---")
+    st.subheader("📊 Simulation Results")
+
+    metric_col1, metric_col2, metric_col3 = st.columns(3)
+    with metric_col1:
+        st.metric("📊 Spillover Risk", f"{sim_result['spillover_prob']:.0%}")
+    with metric_col2:
+        st.metric("⏱️ Expected Delay", f"{sim_result['delay_days']:.1f} days")
+    with metric_col3:
+        st.metric("📅 Sprint Fit", "✅ Yes" if sim_result['sprint_fit'] else "❌ No")
+
+    st.info(f"**Recommendation:** {sim_result['recommendation']}  |  **Risk Level:** {sim_result['risk']}")
+
+    # Optional: Compare with current baseline from Impact Estimator tab
+    st.markdown("---")
+    st.subheader("📈 Compare with Baseline")
+
+    if "result" in st.session_state and st.session_state.result:
+        baseline = st.session_state.result
+        col_a, col_b = st.columns(2)
+        with col_a:
+            st.markdown("**Current Baseline** (from Impact Estimator)")
+            st.metric("Spillover Risk", f"{baseline['spillover_prob']:.0%}")
+            st.metric("Delay Days", f"{baseline['delay_days']:.1f}")
+        with col_b:
+            st.markdown("**What‑If Scenario**")
+            st.metric("Spillover Risk", f"{sim_result['spillover_prob']:.0%}",
+                      delta=f"{sim_result['spillover_prob'] - baseline['spillover_prob']:.1%}")
+            st.metric("Delay Days", f"{sim_result['delay_days']:.1f}",
+                      delta=f"{sim_result['delay_days'] - baseline['delay_days']:.1f}")
+    else:
+        st.info("Run an estimate in the **Impact Estimator** tab first to enable comparison.")
 
 # ============================================================================
 # FOOTER
 # ============================================================================
 st.markdown("---")
-st.caption("🏦 **Fiserv Internal Tool** | Powered by LightGBM models | Spillover F1: 0.78 | Delay MAE: 3.2 days")
+st.caption("🏦 **Fiserv Internal Tool** | Powered by LightGBM & Random Forest models | Spillover F1: 0.79 | Delay MAE: 1.36 days")
