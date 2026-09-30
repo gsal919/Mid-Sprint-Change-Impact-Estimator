@@ -1,10 +1,10 @@
-Fiserv Delivery Intelligence Suite (FDIS)
+# Fiserv Delivery Intelligence Suite (FDIS)
 
-https://img.shields.io/badge/License-MIT-yellow.svg
-https://img.shields.io/badge/python-3.10+-blue.svg
-https://img.shields.io/badge/Streamlit-1.28+-FF4B4B.svg
-https://img.shields.io/badge/Institution-University%2520of%2520Auckland-003366.svg
-https://img.shields.io/badge/Industry%2520Partner-Fiserv-orange.svg
+[![License: Dual](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+[![PyTorch 2.0+](https://img.shields.io/badge/Streamlit-1.28+-FF4B4B.svg)](https://pytorch.org/)
+[![Institution](https://img.shields.io/badge/Institution-University%20of%20Auckland-003366.svg)](https://www.auckland.ac.nz/)
+[![IndustryPartner](https://img.shields.io/badge/Industry%2520Partner-Fiserv-orange.svg)](https://www.fiserv.com/)
 
 Report: Fiserv Delivery Intelligence Suite: An AI-Driven Impact Estimator for Agile Project Delivery (2026)
 Author: Gurudas Salunke
