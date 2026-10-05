@@ -256,23 +256,18 @@ def load_fiserv_data():
 
 @st.cache_resource
 def load_models():
-    """Load the LightGBM models trained on pseudo‑data."""
-    model_dir = "models"   # adjust if models are elsewhere
     models = {}
-    if not os.path.exists(model_dir):
-        st.info("Model directory not found – will use heuristic only.")
-        return None
-    try:
-        models["spillover"] = joblib.load(os.path.join(model_dir, "classifier_spillover_lgb.pkl"))
-        models["regression"] = joblib.load(os.path.join(model_dir, "regressor_delay_days.pkl"))
-        # No scaler needed for LightGBM (tree‑based)
-        models["scaler"] = None
-        # Get the exact feature names the model expects
-        if hasattr(models["spillover"], "feature_names_in_"):
-            models["feature_names"] = models["spillover"].feature_names_in_.tolist()
-        else:
-            models["feature_names"] = None
-        return models
+    model_dir = "models"
+    models["spillover"] = joblib.load(os.path.join(model_dir, "classifier_spillover_lgb.pkl"))
+    models["regression"] = joblib.load(os.path.join(model_dir, "regressor_delay_days.pkl"))
+
+    if hasattr(models["spillover"], "feature_names_in_"):
+        models["feature_names"] = models["spillover"].feature_names_in_.tolist()
+        st.write(f"✅ Model expects {len(models['feature_names'])} features:")
+        st.write(models["feature_names"])
+    else:
+        models["feature_names"] = None
+    return models
     except Exception as e:
         st.warning(f"Could not load ML models: {e}")
         return None
