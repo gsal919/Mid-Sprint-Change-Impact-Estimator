@@ -268,9 +268,6 @@ def load_models():
     else:
         models["feature_names"] = None
     return models
-    except Exception as e:
-        st.warning(f"Could not load ML models: {e}")
-        return None
 
 data = load_fiserv_data()
 ml_models = load_models()
